@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="popup-header">
+      <h1>🎓 FluentAI Pro</h1>
+      <span class="version-badge">v2.0</span>
+    </div>
+    
+    <!-- Navigation Tabs -->
+    <div class="popup-tabs">
+      <button class="popup-tab active" data-tab="settings">Settings</button>
+      <button class="popup-tab" data-tab="flashcards">Flashcards</button>
+      <button class="popup-tab" data-tab="stats">Stats</button>
+      <button class="popup-tab" data-tab="apis">APIs</button>
+    </div>
+    
+    <!-- Settings Tab -->
+    <div class="popup-tab-content active" id="settings-tab">
+      <div class="settings-section">
+        <h2>Language Settings</h2>
+        
+        <div class="setting-group">
+          <label for="nativeLanguage">
+            <span class="label-icon">🏠</span>
+            I speak (native language):
+          </label>
+          <select id="nativeLanguage" class="setting-select">
+            <option value="en">English</option>
+            <option value="es">Spanish (Español)</option>
+            <option value="fr">French (Français)</option>
+            <option value="de">German (Deutsch)</option>
+            <option value="ja">Japanese (日本語)</option>
+            <option value="ko">Korean (한국어)</option>
+            <option value="zh">Chinese (中文)</option>
+            <option value="pt">Portuguese (Português)</option>
+            <option value="it">Italian (Italiano)</option>
+            <option value="ru">Russian (Русский)</option>
+            <option value="ar">Arabic (العربية)</option>
+            <option value="hi">Hindi (हिन्दी)</option>
+          </select>
+        </div>
+        
+        <div class="setting-group">
+          <label for="targetLanguage">
+            <span class="label-icon">🎯</span>
+            I want to learn:
+          </label>
+          <select id="targetLanguage" class="setting-select">
+            <option value="es">Spanish (Español)</option>
+            <option value="fr">French (Français)</option>
+            <option value="de">German (Deutsch)</option>
+            <option value="ja">Japanese (日本語)</option>
+            <option value="ko">Korean (한국어)</option>
+            <option value="zh">Chinese (中文)</option>
+            <option value="en">English</option>
+            <option value="pt">Portuguese (Português)</option>
+            <option value="it">Italian (Italiano)</option>
+            <option value="ru">Russian (Русский)</option>
+            <option value="ar">Arabic (العربية)</option>
+            <option value="hi">Hindi (हिन्दी)</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h2>Learning Features</h2>
+        
+        <div class="toggle-setting">
+          <label>
+            <input type="checkbox" id="autoTranslate" checked>
+            <span>Auto-pause for translations</span>
+          </label>
+        </div>
+        
+        <div class="toggle-setting">
+          <label>
+            <input type="checkbox" id="notificationEnabled" checked>
+            <span>Practice notifications</span>
+          </label>
+        </div>
+        
+        <div class="setting-group">
+          <label for="quizFrequency">
+            <span class="label-icon">⏰</span>
+            Quiz frequency (minutes):
+          </label>
+          <input type="number" id="quizFrequency" min="5" max="120" value="30" class="setting-input">
+        </div>
+        
+        <div class="setting-group">
+          <label for="pauseDelay">
+            <span class="label-icon">⏱️</span>
+            Pause delay after subtitle (seconds):
+          </label>
+          <select id="pauseDelay" class="setting-select">
+            <option value="0">0s - Immediate</option>
+            <option value="0.5">0.5s</option>
+            <option value="1" selected>1.0s - Default</option>
+            <option value="1.5">1.5s</option>
+          </select>
+        </div>
+        
+        <div class="setting-group">
+          <label for="difficulty">
+            <span class="label-icon">📊</span>
+            Difficulty level:
+          </label>
+          <select id="difficulty" class="setting-select">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </div>
+      </div>
+      
+      <button id="saveSettings" class="primary-btn">
+        <span class="btn-icon">💾</span>
+        Save Settings
+      </button>
+      
+      <div id="settingsStatus" class="status-message" style="display: none;"></div>
+    </div>
+    
+    <!-- Flashcards Tab -->
+    <div class="popup-tab-content" id="flashcards-tab" style="display: none;">
+      <div class="flashcards-header">
+        <div class="flashcard-stats">
+          <div class="stat">
+            <span class="stat-number" id="totalFlashcards">0</span>
+            <span class="stat-label">Total Cards</span>
+          </div>
+          <div class="stat">
+            <span class="stat-number" id="dueFlashcards">0</span>
+            <span class="stat-label">Due Today</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flashcard-actions">
+        <button id="addFlashcard" class="action-btn">
+          <span class="btn-icon">➕</span>
+          Add New Card
+        </button>
+        <button id="practiceFlashcards" class="action-btn">
+          <span class="btn-icon">📝</span>
+          Practice Now
+        </button>
+        <button id="exportFlashcards" class="action-btn">
+          <span class="btn-icon">📥</span>
+          Export
+        </button>
+        <button id="importFlashcards" class="action-btn">
+          <span class="btn-icon">📤</span>
+          Import
+        </button>
+      </div>
+      
+      <div id="flashcardForm" class="flashcard-form" style="display: none;">
+        <h3>Add New Flashcard</h3>
+        <input type="text" id="flashcardWord" placeholder="Word/Phrase in target language">
+        <input type="text" id="flashcardTranslation" placeholder="Translation in native language">
+        <textarea id="flashcardContext" placeholder="Example sentence (optional)"></textarea>
+        <div class="form-actions">
+          <button id="saveFlashcard" class="primary-btn small">Save</button>
+          <button id="cancelFlashcard" class="secondary-btn small">Cancel</button>
+        </div>
+      </div>
+      
+      <div class="flashcard-list" id="flashcardList">
+        <!-- Flashcards will be loaded here -->
+      </div>
+    </div>
+    
+    <!-- Stats Tab -->
+    <div class="popup-tab-content" id="stats-tab" style="display: none;">
+      <div class="stats-overview">
+        <h2>Learning Progress</h2>
+        
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-value" id="totalCorrect">0</div>
+            <div class="stat-label">Correct Answers</div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">🔥</div>
+            <div class="stat-value" id="currentStreak">0</div>
+            <div class="stat-label">Current Streak</div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">📚</div>
+            <div class="stat-value" id="wordsLearned">0</div>
+            <div class="stat-label">Words Learned</div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-value" id="accuracyRate">0%</div>
+            <div class="stat-label">Accuracy Rate</div>
+          </div>
+        </div>
+        
+        <div class="chart-container">
+          <h3>Weekly Progress</h3>
+          <canvas id="progressChart"></canvas>
+        </div>
+      </div>
+      
+      <button id="resetStats" class="secondary-btn">
+        <span class="btn-icon">🔄</span>
+        Reset Statistics
+      </button>
+    </div>
+    
+    <!-- APIs Tab -->
+    <div class="popup-tab-content" id="apis-tab" style="display: none;">
+      <div class="api-section">
+        <h2>Chrome AI APIs</h2>
+        
+        <div class="api-status-grid">
+          <div class="api-status-item" id="translatorStatus">
+            <span class="api-icon">🌐</span>
+            <span class="api-name">Translator API</span>
+            <span class="api-indicator">⏳</span>
+          </div>
+          
+          <div class="api-status-item" id="languageDetectorStatus">
+            <span class="api-icon">🔍</span>
+            <span class="api-name">Language Detector</span>
+            <span class="api-indicator">⏳</span>
+          </div>
+          
+          <div class="api-status-item" id="summarizerStatus">
+            <span class="api-icon">📝</span>
+            <span class="api-name">Summarizer API</span>
+            <span class="api-indicator">⏳</span>
+          </div>
+          
+          <div class="api-status-item" id="writerStatus">
+            <span class="api-icon">✍️</span>
+            <span class="api-name">Writer API</span>
+            <span class="api-indicator">⏳</span>
+          </div>
+        </div>
+        
+        <div class="chrome-info">
+          <p><strong>Chrome 138+ Required</strong></p>
+          <p>To enable Chrome AI APIs:</p>
+          <ol>
+            <li>Use Chrome Dev/Canary Channel</li>
+            <li>Enable flags at <code>chrome://flags</code></li>
+            <li>Search for "Translation API" and enable</li>
+            <li>Enable other AI API flags</li>
+            <li>Restart Chrome</li>
+          </ol>
+          <a href="chrome://flags" target="_blank" class="link-btn">Open Chrome Flags</a>
+        </div>
+      </div>
+      
+      <div class="api-section">
+        <h2>Gemini API</h2>
+        
+        <div class="setting-group">
+          <label for="geminiApiKey">
+            <span class="label-icon">🔑</span>
+            API Key:
+          </label>
+          <input type="password" id="geminiApiKey" placeholder="AIzaSyC..." class="setting-input">
+        </div>
+        
+        <div class="api-info">
+          <p>Get a <strong>FREE</strong> API key:</p>
+          <ul>
+            <li>✅ 15 requests/minute</li>
+            <li>✅ 1,500 requests/day</li>
+            <li>✅ No credit card required</li>
+          </ul>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" class="link-btn">
+            Get Free API Key
+          </a>
+        </div>
+        
+        <button id="testGeminiApi" class="secondary-btn">
+          <span class="btn-icon">🧪</span>
+          Test API Connection
+        </button>
+        
+        <div id="geminiTestResult" class="test-result" style="display: none;"></div>
+      </div>
+    </div>
+    
+    <!-- Footer -->
+    <div class="popup-footer">
+      <a href="https://www.youtube.com" target="_blank" class="footer-link">
+        📺 Open YouTube
+      </a>
+      <span class="separator">•</span>
+      <a href="#" id="openHelp" class="footer-link">
+        ❓ Help
+      </a>
+    </div>
+  </div>
+  
+  <!-- Import file input (hidden) -->
+  <input type="file" id="importFile" accept=".json" style="display: none;">
+  
+  <script src="popup.js"></script>
+</body>
+</html>

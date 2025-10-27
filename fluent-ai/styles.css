@@ -1,0 +1,843 @@
+/* FluentAI Pro - Enhanced Styles */
+
+/* Main overlay container */
+#fluentai-overlay {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 10000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Side Panel */
+.fluentai-panel {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  width: 380px;
+  max-height: 80vh;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Panel Header */
+.fluentai-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fluentai-logo {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.fluentai-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.fluentai-collapse-btn,
+.fluentai-toggle-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.fluentai-collapse-btn:hover,
+.fluentai-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+/* Collapsed Panel */
+.fluentai-collapsed {
+  position: fixed;
+  right: 20px;
+  top: 80px;
+  z-index: 10000;
+}
+
+.expand-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s;
+  animation: fadeIn 0.3s ease;
+}
+
+.expand-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+}
+
+.expand-btn span:first-child {
+  font-size: 24px;
+}
+
+.expand-btn span:last-child {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Content Area */
+.fluentai-content {
+  padding: 0;
+  max-height: calc(80vh - 65px);
+  overflow-y: auto;
+}
+
+/* Tabs */
+.fluentai-tabs {
+  display: flex;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e1e4e8;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.tab-btn:hover {
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.tab-btn.active {
+  color: #667eea;
+  background: white;
+}
+
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #667eea;
+}
+
+/* Tab Content */
+.tab-content {
+  padding: 20px;
+}
+
+/* Status Section */
+.fluentai-status {
+  background: #f0f4ff;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.fluentai-status p {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #4a5568;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fluentai-status p:last-child {
+  margin-bottom: 0;
+}
+
+.fluentai-status strong {
+  color: #667eea;
+}
+
+/* Exercise Section */
+.fluentai-exercise {
+  background: #fafbfc;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e1e4e8;
+}
+
+.fluentai-subtitle {
+  background: white;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #2d3748;
+  border-left: 3px solid #667eea;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.subtitle-header {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 600;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.subtitle-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #2d3748;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border-left: 3px solid #667eea;
+}
+
+.speak-btn {
+  background: #48bb78;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  margin-top: 5px;
+}
+
+.speak-btn:hover {
+  background: #38a169;
+  transform: scale(1.05);
+}
+
+/* Input Field */
+#fluentai-input {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e1e4e8;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+#fluentai-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Buttons */
+#fluentai-submit,
+.fluentai-skip-btn,
+.action-btn {
+  padding: 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#fluentai-submit {
+  width: 70%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin-right: 2%;
+}
+
+#fluentai-submit:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.fluentai-skip-btn {
+  width: 28%;
+  background: #e0e0e0;
+  color: #333;
+}
+
+.fluentai-skip-btn:hover {
+  background: #d0d0d0;
+  transform: translateY(-1px);
+}
+
+.action-btn {
+  width: 100%;
+  margin-top: 10px;
+  background: #667eea;
+  color: white;
+}
+
+.action-btn:hover {
+  background: #5a6dd8;
+  transform: translateY(-1px);
+}
+
+/* Loading State */
+.fluentai-loading {
+  text-align: center;
+  padding: 20px;
+  color: #667eea;
+  font-weight: 500;
+}
+
+.fluentai-loading::after {
+  content: '';
+  animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+/* Feedback Messages */
+.fluentai-feedback {
+  margin-top: 12px;
+  animation: fadeIn 0.3s ease;
+  min-height: 60px;
+}
+
+.similarity {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+  font-style: italic;
+}
+
+.fluentai-feedback .success,
+.fluentai-feedback .partial,
+.fluentai-feedback .incorrect,
+.fluentai-feedback .error {
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.fluentai-feedback .success {
+  color: #22543d;
+  background: #c6f6d5;
+  border: 1px solid #9ae6b4;
+}
+
+.fluentai-feedback .partial {
+  color: #744210;
+  background: #feebc8;
+  border: 1px solid #fbd38d;
+}
+
+.fluentai-feedback .incorrect {
+  color: #742a2a;
+  background: #fed7d7;
+  border: 1px solid #fc8181;
+}
+
+.fluentai-feedback .error {
+  color: #742a2a;
+  background: #fed7d7;
+  border: 1px solid #fc8181;
+}
+
+.fluentai-feedback .correct-answer {
+  background: white;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 0;
+  font-weight: 500;
+  color: #2d3748;
+  border: 1px solid #e1e4e8;
+}
+
+/* Vocabulary Tab */
+.vocabulary-stats {
+  display: flex;
+  justify-content: space-around;
+  background: #f0f4ff;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.vocabulary-stats p {
+  margin: 0;
+  font-size: 14px;
+  color: #4a5568;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vocabulary-stats span {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.vocabulary-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 15px;
+}
+
+.vocab-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  transition: all 0.2s;
+}
+
+.vocab-item:hover {
+  background: #f8f9fa;
+  transform: translateX(2px);
+}
+
+.vocab-word {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.vocab-translation {
+  color: #4a5568;
+}
+
+.add-flashcard-btn {
+  background: #48bb78;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.add-flashcard-btn:hover {
+  background: #38a169;
+  transform: scale(1.1);
+}
+
+/* Stats Tab */
+.stats-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat-item {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  border: 1px solid #e1e4e8;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: #667eea;
+}
+
+/* Quiz Overlay */
+.fluentai-quiz-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10001;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.quiz-container {
+  background: white;
+  border-radius: 16px;
+  padding: 0;
+  width: 600px;
+  max-width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quiz-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quiz-header h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.quiz-close-btn {
+  background: transparent;
+  color: white;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.quiz-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.quiz-content {
+  padding: 30px;
+  max-height: calc(80vh - 80px);
+  overflow-y: auto;
+}
+
+.quiz-progress {
+  background: #f0f4ff;
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 14px;
+  color: #667eea;
+  font-weight: 500;
+}
+
+.quiz-question h3 {
+  margin: 0 0 20px 0;
+  font-size: 20px;
+  color: #2d3748;
+}
+
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.quiz-option {
+  background: white;
+  border: 2px solid #e1e4e8;
+  padding: 15px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  text-align: left;
+  transition: all 0.2s;
+}
+
+.quiz-option:hover {
+  background: #f0f4ff;
+  border-color: #667eea;
+  transform: translateX(4px);
+}
+
+.quiz-sentence {
+  font-size: 18px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 3px solid #667eea;
+}
+
+.quiz-word {
+  font-size: 32px;
+  font-weight: 600;
+  color: #667eea;
+  text-align: center;
+  margin: 20px 0;
+}
+
+.quiz-input {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  font-size: 16px;
+  margin-bottom: 15px;
+  transition: all 0.2s;
+}
+
+.quiz-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.quiz-submit-btn {
+  width: 100%;
+  padding: 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quiz-submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+/* Quiz Results */
+.quiz-results {
+  text-align: center;
+}
+
+.quiz-results h2 {
+  margin: 0 0 30px 0;
+  font-size: 28px;
+  color: #2d3748;
+}
+
+.quiz-score {
+  margin-bottom: 30px;
+}
+
+.score-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.score-percentage {
+  font-size: 36px;
+  font-weight: 600;
+  color: white;
+}
+
+.quiz-review {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.quiz-review h3 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: #2d3748;
+}
+
+.review-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e1e4e8;
+}
+
+.review-item.correct {
+  border-left: 3px solid #48bb78;
+}
+
+.review-item.incorrect {
+  border-left: 3px solid #f56565;
+}
+
+.quiz-action-btn {
+  padding: 12px 24px;
+  margin: 0 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quiz-action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+}
+
+.quiz-action-btn.secondary {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.quiz-action-btn.secondary:hover {
+  background: #d0d0d0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Notification Toast */
+.fluentai-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 15px 20px;
+  border-radius: 8px;
+  color: white;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  z-index: 10002;
+}
+
+.fluentai-notification.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.fluentai-notification.success {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+}
+
+.fluentai-notification.error {
+  background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+}
+
+.fluentai-notification.info {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Scrollbar Styling */
+.fluentai-content::-webkit-scrollbar,
+.vocabulary-list::-webkit-scrollbar,
+.quiz-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.fluentai-content::-webkit-scrollbar-track,
+.vocabulary-list::-webkit-scrollbar-track,
+.quiz-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.fluentai-content::-webkit-scrollbar-thumb,
+.vocabulary-list::-webkit-scrollbar-thumb,
+.quiz-content::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 4px;
+}
+
+.fluentai-content::-webkit-scrollbar-thumb:hover,
+.vocabulary-list::-webkit-scrollbar-thumb:hover,
+.quiz-content::-webkit-scrollbar-thumb:hover {
+  background: #5a6dd8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .fluentai-panel {
+    width: 320px;
+  }
+  
+  .quiz-container {
+    width: 90%;
+    margin: 20px;
+  }
+  
+  .stats-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Message for when no content is available */
+.quiz-message {
+  text-align: center;
+  color: #666;
+  font-size: 16px;
+  padding: 20px;
+}
