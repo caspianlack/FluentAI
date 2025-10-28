@@ -336,7 +336,9 @@ async function loadSettings() {
     'flashcards',
     'quizFrequency',
     'notificationEnabled',
-    'pauseDelay' // NEW: configurable pause delay
+    'pauseDelay',
+    'useGeminiValidation',
+    'autoPlayAfterCorrect'
   ]);
   
   settings = {
@@ -347,7 +349,9 @@ async function loadSettings() {
     flashcards: result.flashcards || [],
     quizFrequency: result.quizFrequency || 5, // minutes
     notificationEnabled: result.notificationEnabled !== false,
-    pauseDelay: result.pauseDelay !== undefined ? result.pauseDelay : 1.0 // Default 1 second
+    pauseDelay: result.pauseDelay !== undefined ? result.pauseDelay : 1.0, // Default 1 second
+    useGeminiValidation: result.useGeminiValidation !== false,
+    autoPlayAfterCorrect: result.autoPlayAfterCorrect !== false
   };
   
   // Filter flashcards by target language
@@ -356,6 +360,7 @@ async function loadSettings() {
   
   // Reinitialize Chrome AI with new settings
   await initializeChromeAI();
+  // updateAPIStatusDisplay();
 }
 
 // Create the enhanced overlay with side panel and center quiz
@@ -368,7 +373,7 @@ function createOverlay() {
     <!-- Side Panel (collapsible) -->
     <div class="fluentai-panel" id="side-panel">
       <div class="fluentai-header">
-        <span class="fluentai-logo">🎓 FluentAI Pro</span>
+        <span class="fluentai-logo">🎓 FluentAI</span>
         <div class="fluentai-controls">
           <button class="fluentai-collapse-btn" id="collapse-btn">◀</button>
           <button class="fluentai-toggle-btn" id="toggle-btn">Pause</button>
@@ -380,6 +385,7 @@ function createOverlay() {
           <button class="tab-btn active" data-tab="translate">Translate</button>
           <button class="tab-btn" data-tab="vocabulary">Vocabulary</button>
           <button class="tab-btn" data-tab="stats">Stats</button>
+          <button class="tab-btn" data-tab="status">Status</button>
         </div>
         
         <!-- Translate Tab -->
@@ -434,6 +440,39 @@ function createOverlay() {
             </div>
           </div>
           <button class="action-btn" id="start-quiz-btn">Start Quiz</button>
+        </div>
+
+        <!-- Status Tab -->
+        <div class="tab-content" id="status-tab" style="display: none;">
+          <div class="fluentai-status">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Learning Settings</h3>
+            <p>🎯 Learning: <strong>${getLanguageName(settings.targetLanguage)}</strong></p>
+            <p>🗣️ Native: <strong>${getLanguageName(settings.nativeLanguage)}</strong></p>
+            <p>📺 Auto-pause: <strong>${settings.autoTranslate ? 'ON' : 'OFF'}</strong></p>
+            <p>⏱️ Pause delay: <strong>${settings.pauseDelay || 1.0}s</strong></p>
+            <p>🤖 Gemini validation: <strong>${settings.useGeminiValidation !== false ? 'ON' : 'OFF'}</strong></p>
+            <p>▶️ Auto-play after correct: <strong>${settings.autoPlayAfterCorrect !== false ? 'ON' : 'OFF'}</strong></p>
+          </div>
+          
+          <div class="fluentai-status" style="margin-top: 15px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Chrome AI Status</h3>
+            <p id="translator-status">🌐 Translator: <strong>⏳ Checking...</strong></p>
+            <p id="detector-status">🔍 Language Detector: <strong>⏳ Checking...</strong></p>
+            <p id="summarizer-status">📝 Summarizer: <strong>⏳ Checking...</strong></p>
+            <p id="writer-status">✍️ Writer: <strong>⏳ Checking...</strong></p>
+          </div>
+          
+          <div class="fluentai-status" style="margin-top: 15px;">
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Gemini API</h3>
+            <p id="gemini-status">🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong></p>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">
+              Configure API settings in the extension popup
+            </p>
+          </div>
+          
+          <button class="action-btn" id="refresh-status-btn" style="margin-top: 15px;">
+            🔄 Refresh Status
+          </button>
         </div>
       </div>
     </div>
@@ -497,6 +536,12 @@ function setupEventListeners() {
     if (e.key === 'Enter') {
       checkTranslation();
     }
+  })
+  
+  document.getElementById('refresh-status-btn')?.addEventListener('click', async () => {
+    await initializeChromeAI();
+    updateAPIStatusDisplay();
+    showNotification('Status refreshed!', 'success');
   });
 }
 
@@ -1251,6 +1296,12 @@ function observeSubtitles() {
       return;
     }
 
+    if (isAdPlaying()) {
+      handleNewSubtitle('Ad is playing', 'easter egg');
+    }
+
+    else {
+
     const currentTime = video.currentTime;
 
     // Find segment that just ended (with configurable delay)
@@ -1281,6 +1332,7 @@ function observeSubtitles() {
       });
       lastProcessedSegment = null;
     }
+  }
 
   }, 300); // Check more frequently for better timing
 }
@@ -1323,9 +1375,9 @@ async function handleNewSubtitle(text, segment) {
   if (subtitleDisplay) {
     subtitleDisplay.innerHTML = `
       <div class="subtitle-header">🎯 Translate what you just heard:</div>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="subtitle-text" style="flex: 1; margin-bottom: 0;">${text}</div>
-        <button class="speak-btn" id="speak-btn" style="margin-left: 10px;">🔊 Hear Again</button>
+      <div class="subtitle-content">
+        <div class="subtitle-text">${text}</div>
+        <button class="speak-btn" id="speak-btn">🔊</button>
       </div>
     `;
     
@@ -1336,13 +1388,12 @@ async function handleNewSubtitle(text, segment) {
   // Auto-pause video at the END of subtitle segment
   if (settings.autoTranslate) {
     const video = document.querySelector('video');
-    if (video) {
-      video.pause();
-      
-      // Stay at the end of the segment (don't rewind)
-      if (segment && segment.end) {
-        video.currentTime = segment.end;
-      }
+    if (video && !isAdPlaying()) {
+      setTimeout(() => {
+        if (!isAdPlaying()) {
+          video.pause();
+        }
+      }, (settings.pauseDelay || 1) * 1000);
     }
   }
   
@@ -1456,7 +1507,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     // Reload settings to get updated pause delay and filter flashcards
     loadSettings().then(() => {
       initializeChromeAI();
-      
+      updateAPIStatusDisplay();
       // Update UI with new settings
       if (overlay) {
         document.querySelector('.fluentai-status').innerHTML = `
@@ -1495,43 +1546,13 @@ async function checkTranslation() {
   try {
     let correctTranslation = '';
     let isCorrect = false;
+    let validationResult = null;
     
     // Try Chrome Translator API first
     if (chromeAIAvailable.translator) {
       console.log('FluentAI: Using Chrome Translator API');
       try {
         correctTranslation = await translateText(currentSubtitle, settings.targetLanguage, settings.nativeLanguage);
-        
-        // Normalize both strings for comparison - remove punctuation, extra spaces, lowercase
-        const normalizeText = (str) => {
-          return str
-            .toLowerCase()
-            .replace(/[.,!?;:'"]/g, '') // Remove punctuation
-            .replace(/\s+/g, ' ')       // Normalize whitespace
-            .trim();
-        };
-        
-        const normalizedInput = normalizeText(userInput);
-        const normalizedCorrect = normalizeText(correctTranslation);
-        
-        isCorrect = normalizedInput === normalizedCorrect;
-        console.log('FluentAI: Translation result:', { 
-          correctTranslation, 
-          normalizedInput, 
-          normalizedCorrect, 
-          isCorrect 
-        });
-      } catch (error) {
-        console.error('Chrome Translator error:', error);
-      }
-    }
-    
-    // Fallback to Gemini API if available
-    if (!correctTranslation && settings.geminiApiKey) {
-      console.log('FluentAI: Using Gemini API as fallback');
-      const response = await translateWithGemini(currentSubtitle);
-      if (response) {
-        correctTranslation = response;
         
         const normalizeText = (str) => {
           return str
@@ -1541,75 +1562,214 @@ async function checkTranslation() {
             .trim();
         };
         
-        isCorrect = normalizeText(userInput) === normalizeText(correctTranslation);
-        console.log('FluentAI: Gemini translation:', { correctTranslation, isCorrect });
+        const normalizedInput = normalizeText(userInput);
+        const normalizedCorrect = normalizeText(correctTranslation);
+        const similarity = calculateSimilarity(normalizedInput, normalizedCorrect);
+        
+        console.log('FluentAI: Similarity score:', similarity);
+        
+        // High similarity - accept immediately (90%+)
+        if (similarity >= 0.90) {
+          isCorrect = true;
+          validationResult = {
+            correct: true,
+            feedback: 'Perfect! ✅',
+            correctAnswer: correctTranslation,
+            similarity: Math.round(similarity * 100),
+            method: 'exact'
+          };
+        } 
+        // Lower similarity - validate with Gemini if available
+        else if (settings.geminiApiKey && settings.useGeminiValidation) {
+          console.log('FluentAI: Using Gemini for semantic validation');
+          validationResult = await validateWithGemini(
+            userInput,
+            correctTranslation,
+            currentSubtitle,
+            settings.targetLanguage,
+            settings.nativeLanguage
+          );
+          validationResult.similarity = Math.round(similarity * 100);
+          isCorrect = validationResult.correct;
+        }
+        // No Gemini - use similarity threshold
+        else {
+          if (similarity >= 0.85) {
+            validationResult = {
+              correct: false,
+              feedback: 'Very close! 🤔',
+              correctAnswer: correctTranslation,
+              similarity: Math.round(similarity * 100),
+              showGeminiOption: true
+            };
+          } else if (similarity >= 0.60) {
+            validationResult = {
+              correct: false,
+              feedback: 'Close, but not quite. 🤔',
+              correctAnswer: correctTranslation,
+              similarity: Math.round(similarity * 100),
+              showGeminiOption: true
+            };
+          } else {
+            validationResult = {
+              correct: false,
+              feedback: 'Not quite right. ❌',
+              correctAnswer: correctTranslation,
+              similarity: Math.round(similarity * 100),
+              showGeminiOption: true
+            };
+          }
+        }
+        
+      } catch (error) {
+        console.error('Chrome Translator error:', error);
       }
     }
     
-    // If still no translation, use a simple comparison (fallback)
+    // Fallback to Gemini if Chrome AI unavailable
+    if (!correctTranslation && settings.geminiApiKey) {
+      const response = await translateWithGemini(currentSubtitle);
+      if (response) {
+        correctTranslation = response;
+        const normalizeText = (str) => str.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
+        isCorrect = normalizeText(userInput) === normalizeText(correctTranslation);
+        validationResult = {
+          correct: isCorrect,
+          feedback: isCorrect ? 'Perfect! ✅' : 'Not quite right. ❌',
+          correctAnswer: correctTranslation
+        };
+      }
+    }
+    
+    // No translation available
     if (!correctTranslation) {
-      console.log('FluentAI: No translation available, using fallback');
       correctTranslation = `[Translation for: ${currentSubtitle}]`;
-      isCorrect = false;
+      validationResult = {
+        correct: false,
+        feedback: 'Unable to validate translation.',
+        correctAnswer: correctTranslation
+      };
     }
     
     // Display feedback
-    console.log('FluentAI: Displaying feedback - isCorrect:', isCorrect);
     if (isCorrect) {
-      feedbackDiv.innerHTML = `
-        <div class="success">✅ Correct! Great job!</div>
-        <div class="correct-answer">"${currentSubtitle}" → "${correctTranslation}"</div>
+      let successMessage = `
+        <div class="success">✅ ${validationResult.feedback}</div>
+        <div class="correct-answer">"${currentSubtitle}" → "${validationResult.correctAnswer}"</div>
       `;
       
-      // Update stats
+      if (validationResult.chromeWasWrong) {
+        successMessage += `<div style="margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
+          ⭐ <strong>Great job!</strong> Your translation was more natural than Chrome's literal translation.
+        </div>`;
+      }
+      
+      feedbackDiv.innerHTML = successMessage;
       updateQuizStats(1, 1);
       
-      // Auto-advance after delay and RESUME VIDEO
-      setTimeout(() => {
-        skipSubtitle();
-        // Resume video automatically when correct
-        if (settings.autoTranslate) {
-          const video = document.querySelector('video');
-          if (video) {
-            video.play();
-            console.log('FluentAI: Resuming video after correct translation');
+      if (settings.autoPlayAfterCorrect !== false) {
+        setTimeout(() => {
+          skipSubtitle();
+          if (settings.autoTranslate) {
+            document.querySelector('video')?.play();
           }
-        }
-      }, 2000);
-    } else {
-      const similarity = calculateSimilarity(userInput.toLowerCase(), correctTranslation.toLowerCase());
-      console.log('FluentAI: Similarity score:', similarity);
-      
-      let feedbackMessage = '';
-      // Lowered threshold from 0.7 to 0.85 for "close" feedback
-      if (similarity >= 0.85) {
-        feedbackMessage = `
-          <div class="partial">🤔 Very close! The correct translation is:</div>
-          <div class="correct-answer">"${correctTranslation}"</div>
-          <div class="similarity">Similarity: ${Math.round(similarity * 100)}%</div>
-        `;
-      } else if (similarity >= 0.6) {
-        feedbackMessage = `
-          <div class="partial">🤔 Close! The correct translation is:</div>
-          <div class="correct-answer">"${correctTranslation}"</div>
-          <div class="similarity">Similarity: ${Math.round(similarity * 100)}%</div>
-        `;
+        }, 4000); // 4 seconds to read Gemini feedback
       } else {
-        feedbackMessage = `
-          <div class="incorrect">❌ Not quite. The correct translation is:</div>
-          <div class="correct-answer">"${correctTranslation}"</div>
+        // Just clear input, don't skip - let user click Next
+        document.getElementById('fluentai-input').value = '';
+      }
+
+    } else {
+      let feedbackMessage = `
+        <div class="incorrect">❌ ${validationResult.feedback}</div>
+        <div class="correct-answer"><strong>Better translation:</strong> "${validationResult.correctAnswer}"</div>
+      `;
+      
+      if (validationResult.similarity) {
+        feedbackMessage += `<div class="similarity">Similarity: ${validationResult.similarity}%</div>`;
+      }
+      
+      if (validationResult.chromeWasWrong) {
+        feedbackMessage += `<div style="margin-top: 8px; padding: 8px; background: #fee2e2; border-radius: 6px; font-size: 13px; color: #991b1b;">
+          ⚠️ Note: Chrome AI had a less natural translation for this phrase.
+        </div>`;
+      }
+
+      if (validationResult.showGeminiOption && settings.geminiApiKey && !settings.useGeminiValidation) {
+        feedbackMessage += `
+          <button id="verify-with-gemini" style="
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.2s;
+          ">
+            🤖 Think this is wrong? Verify with Gemini
+          </button>
         `;
       }
       
       feedbackDiv.innerHTML = feedbackMessage;
-      
-      // Update stats
+
+      const verifyButton = document.getElementById('verify-with-gemini');
+
+      if (verifyButton) {
+        verifyButton.addEventListener('click', async () => {
+          verifyButton.textContent = '⏳ Checking with Gemini...';
+          verifyButton.disabled = true;
+          
+          const geminiResult = await validateWithGemini(
+            userInput,
+            correctTranslation,
+            currentSubtitle,
+            settings.targetLanguage,
+            settings.nativeLanguage
+          );
+          
+          let geminiMessage = `
+            <div class="${geminiResult.correct ? 'success' : 'incorrect'}">
+              ${geminiResult.correct ? '✅' : '❌'} Gemini says: ${geminiResult.feedback}
+            </div>
+            <div class="correct-answer"><strong>Gemini's translation:</strong> "${geminiResult.correctAnswer}"</div>
+          `;
+          
+          if (geminiResult.chromeWasWrong) {
+            geminiMessage += `<div style="margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
+              ⭐ Chrome AI's translation was less accurate. Your answer was ${geminiResult.correct ? 'correct' : 'closer'}!
+            </div>`;
+          }
+          
+          feedbackDiv.innerHTML = geminiMessage;
+          
+          // Update stats if Gemini says user was actually correct
+          if (geminiResult.correct) {
+            updateQuizStats(1, 0); // Add a correct, don't add another attempt
+            
+            // Handle auto-play if enabled
+            if (settings.autoPlayAfterCorrect !== false) {
+              setTimeout(() => {
+                skipSubtitle();
+                if (settings.autoTranslate) {
+                  document.querySelector('video')?.play();
+                }
+              }, 4000); // 4 seconds to read Gemini feedback
+            } else {
+              // Just clear input, don't skip - let user click Next
+              document.getElementById('fluentai-input').value = '';
+            }
+          }
+        });
+      }
+
       updateQuizStats(0, 1);
-      
-      // Don't auto-resume video if incorrect - let user try again or skip
     }
     
-    console.log('FluentAI: Feedback displayed successfully');
   } catch (error) {
     console.error('Translation check error:', error);
     feedbackDiv.innerHTML = `
@@ -1642,6 +1802,77 @@ async function translateWithGemini(text) {
   } catch (error) {
     console.error('Gemini translation error:', error);
     return null;
+  }
+}
+
+// Validate translation semantically with Gemini
+async function validateWithGemini(userAnswer, chromeTranslation, sourceText, sourceLang, targetLang) {
+  try {
+    const prompt = `You are a language learning tutor. Evaluate this translation exercise.
+
+    SOURCE TEXT (${getLanguageName(sourceLang)}): "${sourceText}"
+    CHROME AI TRANSLATION (${getLanguageName(targetLang)}): "${chromeTranslation}"
+    STUDENT ANSWER (${getLanguageName(targetLang)}): "${userAnswer}"
+
+    Tasks:
+    1. Is the student's answer correct? (Consider natural phrasing, not just literal translation)
+    2. Is Chrome AI's translation accurate? (It sometimes does literal word-by-word translations)
+    3. Provide constructive feedback for the student
+
+    Respond with JSON only, no other text:
+    {
+      "studentCorrect": true or false,
+      "chromeCorrect": true or false,
+      "bestTranslation": "the most natural translation",
+      "feedback": "encouraging feedback for student (2-3 sentences max)",
+      "confidence": 0-100
+    }`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.geminiApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': settings.geminiApiKey
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }]
+      })
+    });
+    
+    const data = await response.json();
+    const resultText = data.candidates[0].content.parts[0].text.trim();
+    
+    // Extract JSON from response (remove markdown code blocks if present)
+    let jsonText = resultText;
+    if (resultText.includes('```json')) {
+      jsonText = resultText.split('```json')[1].split('```')[0].trim();
+    } else if (resultText.includes('```')) {
+      jsonText = resultText.split('```')[1].split('```')[0].trim();
+    }
+    
+    const result = JSON.parse(jsonText);
+    
+    return {
+      correct: result.studentCorrect,
+      feedback: result.feedback,
+      correctAnswer: result.bestTranslation,
+      chromeWasWrong: !result.chromeCorrect,
+      confidence: result.confidence
+    };
+  } catch (error) {
+    console.error('Gemini validation error:', error);
+    return {
+      correct: false,
+      feedback: 'Unable to validate. Try: ' + chromeTranslation,
+      correctAnswer: chromeTranslation,
+      chromeWasWrong: false,
+      method: 'fallback',
+      error: true
+    };
   }
 }
 
@@ -1691,7 +1922,7 @@ async function init() {
   await loadSettings();
   createOverlay();
   addTranscriptButton();
-
+  updateAPIStatusDisplay();
   setTimeout(async () => {
     if (isEnabled) {
       await initializeTranscript();
@@ -1743,4 +1974,30 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
   init();
+}
+
+// Check if an ad is currently playing
+function isAdPlaying() {
+  // Check for ad-showing class on video player
+  const player = document.querySelector('.html5-video-player');
+  if (player && player.classList.contains('ad-showing')) {
+    return true;
+  }
+  return false;
+}
+
+function updateAPIStatusDisplay() {
+  // Update Chrome AI status in Status tab
+  document.getElementById('translator-status').innerHTML = 
+    `🌐 Translator: <strong>${chromeAIAvailable.translator ? '✅ Ready' : '❌ Not available'}</strong>`;
+  document.getElementById('detector-status').innerHTML = 
+    `🔍 Language Detector: <strong>${chromeAIAvailable.languageDetector ? '✅ Ready' : '❌ Not available'}</strong>`;
+  document.getElementById('summarizer-status').innerHTML = 
+    `📝 Summarizer: <strong>${chromeAIAvailable.summarizer ? '✅ Ready' : '❌ Not available'}</strong>`;
+  document.getElementById('writer-status').innerHTML = 
+    `✍️ Writer: <strong>${chromeAIAvailable.writer ? '✅ Ready' : '❌ Not available'}</strong>`;
+  
+  // Update Gemini status
+  document.getElementById('gemini-status').innerHTML = 
+    `🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong>`;
 }

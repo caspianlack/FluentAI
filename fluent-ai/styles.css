@@ -198,13 +198,7 @@
   padding: 12px;
   border-radius: 6px;
   margin-bottom: 12px;
-  font-size: 15px;
-  line-height: 1.5;
-  color: #2d3748;
   border-left: 3px solid #667eea;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .subtitle-header {
@@ -216,19 +210,26 @@
   letter-spacing: 0.5px;
 }
 
-.subtitle-text {
+.subtitle-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.subtitle-text, .fluentai-feedback .correct-answer {
+  flex: 1;
   font-size: 15px;
   line-height: 1.5;
   color: #2d3748;
-  margin-bottom: 10px;
-  padding: 8px;
+  /* padding: 8px; */
   background: #f8f9fa;
-  border-radius: 6px;
-  border-left: 3px solid #667eea;
+  /* border-radius: 6px;
+  border-left: 3px solid #667eea; */
 }
 
 .speak-btn {
-  background: #48bb78;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
   padding: 8px 12px;
@@ -236,7 +237,10 @@
   cursor: pointer;
   font-size: 13px;
   transition: all 0.2s;
-  margin-top: 5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  min-width: fit-content;
 }
 
 .speak-btn:hover {
@@ -350,7 +354,8 @@
   padding: 10px;
   border-radius: 6px;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: 15px;
+  line-height: 1.5;
   font-weight: 500;
 }
 

@@ -77,6 +77,20 @@
             <span>Auto-pause for translations</span>
           </label>
         </div>
+
+        <div class="toggle-setting">
+          <label>
+            <input type="checkbox" id="useGeminiValidation" checked>
+            <span>Use Gemini for semantic validation (more accurate, slower)</span>
+          </label>
+        </div>
+
+        <div class="toggle-setting">
+          <label>
+            <input type="checkbox" id="autoPlayAfterCorrect" checked>
+            <span>Auto-play video after correct answer</span>
+          </label>
+        </div>
         
         <div class="toggle-setting">
           <label>
@@ -222,49 +236,6 @@
     
     <!-- APIs Tab -->
     <div class="popup-tab-content" id="apis-tab" style="display: none;">
-      <div class="api-section">
-        <h2>Chrome AI APIs</h2>
-        
-        <div class="api-status-grid">
-          <div class="api-status-item" id="translatorStatus">
-            <span class="api-icon">🌐</span>
-            <span class="api-name">Translator API</span>
-            <span class="api-indicator">⏳</span>
-          </div>
-          
-          <div class="api-status-item" id="languageDetectorStatus">
-            <span class="api-icon">🔍</span>
-            <span class="api-name">Language Detector</span>
-            <span class="api-indicator">⏳</span>
-          </div>
-          
-          <div class="api-status-item" id="summarizerStatus">
-            <span class="api-icon">📝</span>
-            <span class="api-name">Summarizer API</span>
-            <span class="api-indicator">⏳</span>
-          </div>
-          
-          <div class="api-status-item" id="writerStatus">
-            <span class="api-icon">✍️</span>
-            <span class="api-name">Writer API</span>
-            <span class="api-indicator">⏳</span>
-          </div>
-        </div>
-        
-        <div class="chrome-info">
-          <p><strong>Chrome 138+ Required</strong></p>
-          <p>To enable Chrome AI APIs:</p>
-          <ol>
-            <li>Use Chrome Dev/Canary Channel</li>
-            <li>Enable flags at <code>chrome://flags</code></li>
-            <li>Search for "Translation API" and enable</li>
-            <li>Enable other AI API flags</li>
-            <li>Restart Chrome</li>
-          </ol>
-          <a href="chrome://flags" target="_blank" class="link-btn">Open Chrome Flags</a>
-        </div>
-      </div>
-      
       <div class="api-section">
         <h2>Gemini API</h2>
         

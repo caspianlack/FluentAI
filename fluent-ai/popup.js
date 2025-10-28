@@ -80,7 +80,9 @@ async function loadSettings() {
     'notificationEnabled',
     'quizFrequency',
     'difficulty',
-    'pauseDelay'
+    'pauseDelay',
+    'useGeminiValidation',
+    'autoPlayAfterCorrect'
   ]);
   
   // Apply settings to UI
@@ -109,6 +111,9 @@ async function loadSettings() {
     document.getElementById('geminiApiKey').value = result.geminiApiKey;
     updateGeminiStatus(result.geminiApiKey);
   }
+
+  document.getElementById('useGeminiValidation').checked = result.useGeminiValidation !== false;
+  document.getElementById('autoPlayAfterCorrect').checked = result.autoPlayAfterCorrect !== false;
 }
 
 // Save settings
@@ -121,6 +126,8 @@ async function saveSettings() {
   const difficulty = document.getElementById('difficulty').value;
   const pauseDelay = parseFloat(document.getElementById('pauseDelay').value);
   const geminiApiKey = document.getElementById('geminiApiKey').value.trim();
+  const useGeminiValidation = document.getElementById('useGeminiValidation').checked;
+  const autoPlayAfterCorrect = document.getElementById('autoPlayAfterCorrect').checked;
   
   // Validate
   if (nativeLanguage === targetLanguage) {
@@ -142,7 +149,9 @@ async function saveSettings() {
     notificationEnabled,
     quizFrequency,
     difficulty,
-    pauseDelay
+    pauseDelay,
+    useGeminiValidation,
+    autoPlayAfterCorrect
   });
   
   // Update alarm for notifications
@@ -167,7 +176,9 @@ async function saveSettings() {
           notificationEnabled,
           quizFrequency,
           difficulty,
-          pauseDelay
+          pauseDelay,
+          useGeminiValidation,
+          autoPlayAfterCorrect
         }
       }).catch(err => console.log('Content script not ready'));
     }
