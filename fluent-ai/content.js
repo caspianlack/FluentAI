@@ -25,6 +25,17 @@ let videoTimeUpdateInterval = null;
 let segmentsProcessed = new Set();
 let lastProcessedSegment = null;
 
+// Initialize IndexedDB
+async function initializeDB() {
+  try {
+    await flashcardDB.waitForReady();
+    console.log('IndexedDB ready for content script');
+  } catch (error) {
+    console.error('Failed to initialize IndexedDB in content script:', error);
+  }
+}
+
+// Extract transcript from DOM
 async function extractTranscriptFromDOM() {
   console.log('FluentAI: Extracting transcript from DOM...');
   
@@ -264,51 +275,6 @@ async function translateText(text, sourceLanguage = null, targetLanguage = null)
   }
 }
 
-// Helper function to detect language using the bridge
-async function detectLanguage(text) {
-  if (!chromeAIAvailable.languageDetector) {
-    throw new Error('Chrome Language Detector API not available');
-  }
-  
-  const result = await chromeAIBridge('detectLanguage', { text });
-  
-  if (result.success) {
-    return result.results;
-  } else {
-    throw new Error(result.error || 'Language detection failed');
-  }
-}
-
-// Helper function to summarize text using the bridge
-async function summarizeContent(text, type = 'key-points', length = 'short') {
-  if (!chromeAIAvailable.summarizer) {
-    throw new Error('Chrome Summarizer API not available');
-  }
-  
-  const result = await chromeAIBridge('summarize', { text, type, length });
-  
-  if (result.success) {
-    return result.summary;
-  } else {
-    throw new Error(result.error || 'Summarization failed');
-  }
-}
-
-// Helper function to generate content using the bridge
-async function generateWithAI(prompt, context = '') {
-  if (!chromeAIAvailable.writer) {
-    throw new Error('Chrome Writer API not available');
-  }
-  
-  const result = await chromeAIBridge('generateContent', { prompt, context });
-  
-  if (result.success) {
-    return result.content;
-  } else {
-    throw new Error(result.error || 'Content generation failed');
-  }
-}
-
 // Update API status in UI
 function updateAPIStatus() {
   if (overlay) {
@@ -333,7 +299,6 @@ async function loadSettings() {
     'targetLanguage',
     'autoTranslate',
     'geminiApiKey',
-    'flashcards',
     'quizFrequency',
     'notificationEnabled',
     'pauseDelay',
@@ -346,21 +311,24 @@ async function loadSettings() {
     targetLanguage: result.targetLanguage || 'es',
     autoTranslate: result.autoTranslate !== false,
     geminiApiKey: result.geminiApiKey || '',
-    flashcards: result.flashcards || [],
-    quizFrequency: result.quizFrequency || 5, // minutes
+    quizFrequency: result.quizFrequency || 5,
     notificationEnabled: result.notificationEnabled !== false,
-    pauseDelay: result.pauseDelay !== undefined ? result.pauseDelay : 1.0, // Default 1 second
+    pauseDelay: result.pauseDelay !== undefined ? result.pauseDelay : 0.0,
     useGeminiValidation: result.useGeminiValidation !== false,
     autoPlayAfterCorrect: result.autoPlayAfterCorrect !== false
   };
   
-  // Filter flashcards by target language
-  flashcards = (settings.flashcards || []).filter(card => card.language === settings.targetLanguage);
-  console.log(`FluentAI: Loaded ${flashcards.length} flashcards for ${settings.targetLanguage}`);
+  // Load flashcards for current language from IndexedDB
+  try {
+    flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+    console.log(`FluentAI: Loaded ${flashcards.length} flashcards for ${settings.targetLanguage} from IndexedDB`);
+  } catch (error) {
+    console.error('Error loading flashcards from IndexedDB:', error);
+    flashcards = [];
+  }
   
   // Reinitialize Chrome AI with new settings
   await initializeChromeAI();
-  // updateAPIStatusDisplay();
 }
 
 // Create the enhanced overlay with side panel and center quiz
@@ -414,6 +382,25 @@ function createOverlay() {
             <p>📚 Words collected: <span id="vocab-count">0</span></p>
             <p>🎯 Flashcards: <span id="flashcard-count">0</span></p>
           </div>
+          <button class="overlay-tab" data-tab="practice">
+            🎓 Practice
+          </button>
+
+          <div class="overlay-tab-content" id="practice-tab">
+            <div class="practice-container">
+              <h3>📚 Flashcard Practice</h3>
+              <div class="practice-stats">
+                <div class="stat-box">
+                  <span id="total-flashcards-count">0</span>
+                  <span>Total Cards</span>
+                </div>
+              </div>
+              <button id="start-practice-btn" class="primary-btn">
+                🎯 Start Practice (5 Random Cards)
+              </button>
+            </div>
+          </div>
+
           <div class="vocabulary-list" id="vocab-list"></div>
           <button class="action-btn" id="extract-vocab-btn">Extract Vocabulary</button>
           <button class="action-btn" id="create-flashcards-btn">Create Flashcards</button>
@@ -463,10 +450,10 @@ function createOverlay() {
           </div>
           
           <div class="fluentai-status" style="margin-top: 15px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Gemini API</h3>
-            <p id="gemini-status">🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong></p>
+            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Storage Status</h3>
+            <p id="indexeddb-status">💾 IndexedDB: <strong>⏳ Checking...</strong></p>
             <p style="font-size: 12px; color: #666; margin-top: 10px;">
-              Configure API settings in the extension popup
+              Using IndexedDB for unlimited flashcard storage
             </p>
           </div>
           
@@ -502,6 +489,7 @@ function createOverlay() {
   document.body.appendChild(overlay);
   setupEventListeners();
   updateStats();
+  updateIndexedDBStatus();
 }
 
 // Setup all event listeners
@@ -536,11 +524,21 @@ function setupEventListeners() {
     if (e.key === 'Enter') {
       checkTranslation();
     }
-  })
+  });
+
+  document.querySelectorAll('.overlay-tab').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const tab = e.target.dataset.tab;
+      if (tab === 'practice') {
+        startPracticeFromOverlay();
+      }
+    });
+  });
   
   document.getElementById('refresh-status-btn')?.addEventListener('click', async () => {
     await initializeChromeAI();
     updateAPIStatusDisplay();
+    updateIndexedDBStatus();
     showNotification('Status refreshed!', 'success');
   });
 }
@@ -569,56 +567,640 @@ function expandPanel() {
   document.getElementById('collapsed-panel').style.display = 'none';
 }
 
-// Extract vocabulary from current subtitles
-async function extractVocabulary() {
-  if (!currentSubtitle) {
-    showNotification('No subtitle available', 'error');
+// Update IndexedDB status display
+async function updateIndexedDBStatus() {
+  try {
+    const stats = await flashcardDB.getStats(settings.targetLanguage);
+    const element = document.getElementById('indexeddb-status');
+    if (element) {
+      element.innerHTML = `💾 IndexedDB: <strong>✅ Ready (${stats.total} ${settings.targetLanguage} cards)</strong>`;
+    }
+    
+    // Update flashcard count in vocabulary tab
+    const flashcardCountElement = document.getElementById('flashcard-count');
+    if (flashcardCountElement) {
+      flashcardCountElement.textContent = stats.total;
+    }
+  } catch (error) {
+    const element = document.getElementById('indexeddb-status');
+    if (element) {
+      element.innerHTML = `💾 IndexedDB: <strong>❌ Error</strong>`;
+    }
+  }
+}
+
+// ============================================================================
+// SMART VOCABULARY EXTRACTION SYSTEM (Updated for IndexedDB)
+// ============================================================================
+
+// Common stop words to filter out
+const STOP_WORDS = new Set([
+  // English
+  'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+  'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+  'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these',
+  'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which',
+  'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both',
+  'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only',
+  'own', 'same', 'so', 'than', 'too', 'very', 'just', 'now', 'here',
+  'there', 'then', 'them', 'their', 'my', 'your', 'his', 'her', 'its',
+  'our', 'get', 'go', 'got', 'going', 'went', 'gone',
+  // Spanish
+  'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas', 'y', 'o', 'pero',
+  'de', 'del', 'al', 'en', 'con', 'por', 'para', 'como', 'más', 'que',
+  'es', 'son', 'era', 'están', 'esto', 'eso', 'mi', 'tu', 'su',
+  // French  
+  'le', 'la', 'les', 'un', 'une', 'des', 'et', 'ou', 'mais', 'de', 'du',
+  'dans', 'sur', 'avec', 'par', 'pour', 'comme', 'plus', 'que', 'est',
+  'sont', 'ce', 'cette', 'ces', 'mon', 'ton', 'son',
+  // German
+  'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem',
+  'und', 'oder', 'aber', 'von', 'zu', 'in', 'mit', 'auf', 'für', 'ist',
+  'sind', 'war', 'waren', 'dieser', 'diese', 'dieses', 'mein', 'dein', 'sein'
+]);
+
+// Clean and normalize a word
+function cleanWord(word) {
+  if (!word) return '';
+  
+  let cleaned = word
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s'-]/g, '')
+    .replace(/^['"-]+|['"-]+$/g, '');
+  
+  return cleaned;
+}
+
+// Check if a word is valid for learning
+function isValidWord(word, difficulty = 'intermediate') {
+  if (!word || word.length < 2) return false;
+  if (/^\d+$/.test(word)) return false;
+  if (STOP_WORDS.has(word.toLowerCase())) return false;
+  
+  const minLength = {
+    'beginner': 3,
+    'intermediate': 3,
+    'advanced': 2
+  }[difficulty] || 3;
+  
+  if (word.length < minLength) return false;
+  if (!/[a-zA-Z]/.test(word)) return false;
+  
+  return true;
+}
+
+// Phase 1: Local extraction with filtering
+async function extractVocabularyLocal() {
+  if (!transcriptSegments || transcriptSegments.length === 0) {
+    showNotification('Please load subtitles first', 'error');
+    return [];
+  }
+  
+  console.log('Phase 1: Local extraction starting...');
+  
+  const allText = transcriptSegments.map(seg => seg.text).join(' ');
+  const allWords = allText.split(/\s+/);
+  
+  console.log(`Found ${allWords.length} total words in transcript`);
+  
+  const wordFrequency = new Map();
+  
+  for (const word of allWords) {
+    const cleaned = cleanWord(word);
+    if (isValidWord(cleaned, settings.difficulty)) {
+      wordFrequency.set(cleaned, (wordFrequency.get(cleaned) || 0) + 1);
+    }
+  }
+  
+  console.log(`${wordFrequency.size} unique valid words after cleaning`);
+  
+  const sortedWords = Array.from(wordFrequency.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(entry => entry[0]);
+  
+  // Remove words already in flashcards using IndexedDB
+  const newWords = [];
+  for (const word of sortedWords) {
+    const exists = await flashcardDB.wordExists(word, settings.targetLanguage);
+    if (!exists) {
+      newWords.push(word);
+    }
+  }
+  
+  console.log(`${newWords.length} words after removing duplicates`);
+  
+  const limitedWords = newWords.slice(0, 30);
+  console.log(`Limited to ${limitedWords.length} words for translation`);
+  
+  return limitedWords;
+}
+
+// Phase 2: Chrome AI Translation
+async function translateWordsWithChromeAI(words) {
+  console.log('Phase 2: Translating with Chrome AI...');
+  
+  if (!chromeAIAvailable.translator) {
+    showNotification('Chrome AI Translator not available', 'error');
+    return [];
+  }
+  
+  const translations = [];
+  
+  for (const word of words) {
+    try {
+      const result = await chromeAIBridge('translate', {
+        text: word,
+        sourceLanguage: settings.targetLanguage,
+        targetLanguage: settings.nativeLanguage
+      });
+      
+      if (result.success && result.translation) {
+        translations.push({
+          original: word,
+          translation: result.translation,
+          confidence: 80,
+          source: 'chrome-ai'
+        });
+      }
+    } catch (error) {
+      console.error(`Translation error for "${word}":`, error);
+    }
+  }
+  
+  console.log(`Successfully translated ${translations.length} words`);
+  return translations;
+}
+
+// Main orchestration function for vocabulary extraction
+async function extractAndShowVocabularySmart() {
+  console.log('=== Starting Smart Vocabulary Extraction ===');
+  
+  if (!transcriptSegments || transcriptSegments.length === 0) {
+    showNotification('Please load subtitles first', 'error');
     return;
   }
   
-  const words = currentSubtitle.split(/\s+/).filter(word => {
-    // Filter out common words and punctuation
-    return word.length > 2 && !/^\W+$/.test(word);
+  if (!chromeAIAvailable.translator) {
+    showNotification('Chrome AI Translator is required. Please enable it in chrome://flags', 'error');
+    return;
+  }
+  
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (!vocabTab) return;
+  
+  // Show loading state - Phase 1
+  vocabTab.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <h3>🔍 Step 1/3: Analyzing Transcript...</h3>
+      <p>Extracting unique vocabulary locally</p>
+    </div>
+  `;
+  switchTab('vocabulary');
+  
+  // Phase 1: Local extraction
+  const words = await extractVocabularyLocal();
+  
+  if (words.length === 0) {
+    vocabTab.innerHTML = `
+      <div class="error-message">
+        <h3>❌ No New Vocabulary Found</h3>
+        <p>All words from this video are already in your flashcards, or no suitable words were found.</p>
+        <button id="retry-extraction" class="primary-btn">Try Another Video</button>
+      </div>
+    `;
+    document.getElementById('retry-extraction')?.addEventListener('click', extractAndShowVocabularySmart);
+    return;
+  }
+  
+  // Show loading state - Phase 2
+  vocabTab.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <h3>🌐 Step 2/3: Translating Words...</h3>
+      <p>Using Chrome AI to translate ${words.length} words</p>
+    </div>
+  `;
+  
+  // Phase 2: Chrome AI Translation
+  const translations = await translateWordsWithChromeAI(words);
+  
+  if (translations.length === 0) {
+    vocabTab.innerHTML = `
+      <div class="error-message">
+        <h3>❌ Translation Failed</h3>
+        <p>Unable to translate words. Please check Chrome AI Translator is enabled.</p>
+        <button id="retry-extraction" class="primary-btn">Try Again</button>
+      </div>
+    `;
+    document.getElementById('retry-extraction')?.addEventListener('click', extractAndShowVocabularySmart);
+    return;
+  }
+  
+  // Display results directly (skip Gemini validation for now)
+  await showVocabularySelectorSmart(translations);
+}
+
+// Display vocabulary with smart UI
+async function showVocabularySelectorSmart(wordPairs) {
+  if (!wordPairs || wordPairs.length === 0) {
+    showNotification('No vocabulary to display', 'info');
+    return;
+  }
+  
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (!vocabTab) return;
+  
+  // Filter by confidence
+  const highConfidenceWords = wordPairs.filter(pair => pair.confidence >= 70);
+  
+  if (highConfidenceWords.length === 0) {
+    vocabTab.innerHTML = `
+      <div class="error-message">
+        <h3>⚠️ Low Confidence Translations</h3>
+        <p>No translations met the quality threshold (70%+ confidence)</p>
+        <button id="retry-extraction" class="primary-btn">Try Again</button>
+      </div>
+    `;
+    document.getElementById('retry-extraction')?.addEventListener('click', extractAndShowVocabularySmart);
+    return;
+  }
+  
+  // Generate descriptions for words
+  // vocabTab.innerHTML = `
+  //   <div class="loading-state">
+  //     <div class="spinner"></div>
+  //     <h3>✨ Generating Descriptions...</h3>
+  //     <p>Adding helpful explanations for each word</p>
+  //   </div>
+  // `;
+  
+  //const wordsWithDescriptions = await generateDescriptionsForWords(highConfidenceWords);
+  const words = highConfidenceWords;
+
+  vocabTab.innerHTML = `
+    <div class="vocab-extraction">
+      <h3>📚 Found ${words.length} Words</h3>
+      <p class="vocab-subtitle">
+        Translated with Chrome AI 🌐
+      </p>
+      
+      <div class="vocab-actions">
+        <button id="select-all-vocab" class="action-btn">Select All</button>
+        <button id="deselect-all-vocab" class="action-btn">Deselect All</button>
+        <button id="add-selected-vocab" class="primary-btn">Add Selected (0)</button>
+      </div>
+      
+      <div id="vocab-list" class="vocab-list"></div>
+    </div>
+  `;
+  
+  const vocabList = document.getElementById('vocab-list');
+  const addSelectedBtn = document.getElementById('add-selected-vocab');
+  
+  // Create word items WITHOUT descriptions initially
+  words.forEach((pair, index) => {
+    const vocabItem = document.createElement('div');
+    vocabItem.className = 'vocab-item';
+    vocabItem.dataset.index = index;
+    
+    vocabItem.innerHTML = `
+      <input type="checkbox" id="vocab-${index}" class="vocab-checkbox" data-index="${index}" checked>
+      <div class="vocab-content">
+        <div class="vocab-word">
+          <strong>${pair.original}</strong>
+          <button class="info-btn" data-index="${index}" title="Load description">ℹ️</button>
+        </div>
+        <div class="vocab-translation">${pair.translation}</div>
+        <div class="vocab-description" id="desc-${index}" style="display: none;">
+          <!-- Description loads on demand -->
+        </div>
+        <div class="vocab-meta">
+          <span class="confidence-badge">${pair.confidence}%</span>
+          <span class="source-badge">${pair.source || 'chrome-ai'}</span>
+        </div>
+      </div>
+    `;
+    vocabList.appendChild(vocabItem);
   });
   
-  // Add unique words to vocabulary
-  for (const word of words) {
-    const cleanWord = word.replace(/[^\w\s]/g, '').toLowerCase();
-    if (cleanWord) {
-      vocabularySet.add(cleanWord);
+  // Add info button click handlers
+  document.querySelectorAll('.info-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const index = parseInt(btn.dataset.index);
+      const descElement = document.getElementById(`desc-${index}`);
+      const word = words[index];
+      
+      if (!descElement) return;
+      
+      // If already visible, just hide it
+      if (descElement.style.display !== 'none') {
+        descElement.style.display = 'none';
+        btn.textContent = 'ℹ️';
+        return;
+      }
+      
+      // If no description yet, load it
+      if (!word.description) {
+        btn.textContent = '⏳';
+        btn.disabled = true;
+        
+        try {
+          // Generate description for just this word
+          const description = await generateSingleDescription(word);
+          word.description = description;
+          descElement.textContent = description;
+        } catch (error) {
+          console.error('Error loading description:', error);
+          descElement.textContent = 'Failed to load description';
+        }
+        
+        btn.disabled = false;
+        btn.textContent = '❌';
+      }
+      
+      // Show the description
+      descElement.style.display = 'block';
+      btn.textContent = '❌';
+    });
+  });
+  
+  // Update selected count
+  function updateSelectedCount() {
+    const selected = document.querySelectorAll('.vocab-checkbox:checked').length;
+    addSelectedBtn.textContent = `Add Selected (${selected})`;
+    addSelectedBtn.disabled = selected === 0;
+  }
+  
+  updateSelectedCount();
+  
+  // Select/deselect all
+  document.getElementById('select-all-vocab').addEventListener('click', () => {
+    document.querySelectorAll('.vocab-checkbox').forEach(cb => cb.checked = true);
+    updateSelectedCount();
+  });
+  
+  document.getElementById('deselect-all-vocab').addEventListener('click', () => {
+    document.querySelectorAll('.vocab-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedCount();
+  });
+  
+  vocabList.addEventListener('change', updateSelectedCount);
+  
+  // Add to flashcards
+  // Add to flashcards
+  addSelectedBtn.addEventListener('click', async () => {
+    const selectedCheckboxes = document.querySelectorAll('.vocab-checkbox:checked');
+    const selectedWords = Array.from(selectedCheckboxes).map(cb => {
+      const index = parseInt(cb.dataset.index);
+      return words[index]; // Changed from wordsWithDescriptions to words
+    });
+    
+    if (selectedWords.length === 0) return;
+    
+    addSelectedBtn.disabled = true;
+    addSelectedBtn.textContent = 'Adding...';
+    
+    // Create flashcard objects with descriptions (will be empty or loaded on-demand)
+    const flashcardsToAdd = selectedWords.map(pair => ({
+      word: pair.original,
+      translation: pair.translation,
+      context: pair.context || '',
+      description: pair.description || '', // Will be empty unless user clicked ℹ️
+      language: settings.targetLanguage,
+      confidence: pair.confidence,
+      source: pair.source
+    }));
+    
+    try {
+      // Add to IndexedDB
+      await flashcardDB.addFlashcards(flashcardsToAdd);
+      
+      // Update local flashcards array
+      flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+      
+      showNotification(`Added ${selectedWords.length} words to flashcards!`, 'success');
+      
+      // Show success
+      vocabTab.innerHTML = `
+        <div class="success-message">
+          <h3>✅ Success!</h3>
+          <p>${selectedWords.length} words added to your flashcards</p>
+          <button id="extract-more-vocab" class="primary-btn">Extract More Words</button>
+          <button id="start-practice-now" class="primary-btn">🎓 Practice Now</button>
+        </div>
+      `;
+      
+      document.getElementById('extract-more-vocab').addEventListener('click', extractAndShowVocabularySmart);
+      document.getElementById('start-practice-now').addEventListener('click', () => startPracticeFromOverlay());
+      
+      // Update flashcard count display
+      updateIndexedDBStatus();
+      
+    } catch (error) {
+      console.error('Error adding flashcards:', error);
+      showNotification('Error adding flashcards to database', 'error');
+      addSelectedBtn.disabled = false;
+      addSelectedBtn.textContent = 'Add Selected (0)';
+    }
+  });
+  
+  switchTab('vocabulary');
+}
+
+async function generateSingleDescription(wordPair) {
+  // Try Chrome AI Writer first
+  if (chromeAIAvailable.writer) {
+    try {
+      const prompt = `Explain the ${settings.targetLanguage} word "${wordPair.original}" (meaning: ${wordPair.translation}) in one simple sentence. Include when/how it's used.`;
+      
+      const result = await chromeAIBridge('generateContent', {
+        prompt: prompt,
+        context: 'Language learning vocabulary explanation'
+      });
+      
+      if (result.success && result.content) {
+        return result.content.trim().substring(0, 200);
+      }
+    } catch (error) {
+      console.error('Error generating description with Chrome AI:', error);
     }
   }
   
-  updateVocabularyDisplay();
+  // Fallback to Gemini if available
+  if (settings.geminiApiKey) {
+    try {
+      const prompt = `Explain "${wordPair.original}" (${wordPair.translation}) in ${settings.targetLanguage} in one simple, clear sentence.`;
+      
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${settings.geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 100
+          }
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        return data.candidates[0].content.parts[0].text.trim().substring(0, 200);
+      }
+    } catch (error) {
+      console.error('Gemini description error:', error);
+    }
+  }
   
-  // Try to translate each word if Chrome Translator is available
-  if (chromeAIAvailable.translator) {
-    const vocabList = document.getElementById('vocab-list');
-    vocabList.innerHTML = '';
+  // Simple fallback
+  return `"${wordPair.original}" means "${wordPair.translation}" in ${settings.targetLanguage}.`;
+}
+
+async function startPracticeFromOverlay() {
+  try {
+    // Get flashcards from IndexedDB
+    const allFlashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
     
-    for (const word of vocabularySet) {
+    if (allFlashcards.length === 0) {
+      showNotification('No flashcards available. Add some words first!', 'error');
+      return;
+    }
+    
+    showNotification(`Loading practice session...`, 'info');
+    
+    // Select 5 random flashcards
+    const shuffled = [...allFlashcards].sort(() => Math.random() - 0.5);
+    const practiceCards = shuffled.slice(0, Math.min(5, shuffled.length));
+    
+    // Start practice quiz in the overlay
+    startFlashcardPractice(practiceCards);
+    
+  } catch (error) {
+    console.error('Error starting practice:', error);
+    showNotification('Error loading flashcards for practice', 'error');
+  }
+}
+
+async function generateDescriptionsForWords(wordPairs) {
+  const results = [];
+  let successCount = 0;
+  
+  for (let i = 0; i < wordPairs.length; i++) {
+    const pair = wordPairs[i];
+    let description = '';
+    
+    // Show progress
+    if (i % 5 === 0) {
+      showNotification(`Generating descriptions... ${i + 1}/${wordPairs.length}`, 'info');
+    }
+    
+    // Try Chrome AI Writer first
+    if (chromeAIAvailable.writer) {
       try {
-        const translation = await translateText(word);
-        const vocabItem = document.createElement('div');
-        vocabItem.className = 'vocab-item';
-        vocabItem.innerHTML = `
-          <span class="vocab-word">${word}</span>
-          <span class="vocab-translation">${translation}</span>
-          <button class="add-flashcard-btn" data-word="${word}" data-translation="${translation}">+📇</button>
-        `;
-        vocabList.appendChild(vocabItem);
+        const prompt = `Explain the ${settings.targetLanguage} word "${pair.original}" (meaning: ${pair.translation}) in one simple sentence. Include when/how it's used.`;
+        
+        const result = await chromeAIBridge('generateContent', {
+          prompt: prompt,
+          context: 'Language learning vocabulary explanation'
+        });
+        
+        if (result.success && result.content) {
+          description = result.content.trim().substring(0, 200); // Limit length
+          successCount++;
+        }
       } catch (error) {
-        console.error('Translation error for word:', word, error);
+        console.error('Error generating description with Chrome AI:', error);
       }
     }
     
-    // Add flashcard buttons listeners
-    document.querySelectorAll('.add-flashcard-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        addToFlashcards(e.target.dataset.word, e.target.dataset.translation);
-      });
+    // Fallback to Gemini if available and Chrome AI failed
+    if (!description && settings.geminiApiKey) {
+      try {
+        const prompt = `Explain "${pair.original}" (${pair.translation}) in ${settings.targetLanguage} in one simple, clear sentence. Format: "${pair.original} means ${pair.translation}. [Usage note]. Simple sentence: [example]."`;
+        
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${settings.geminiApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 100
+            }
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          description = data.candidates[0].content.parts[0].text.trim().substring(0, 200);
+          successCount++;
+        }
+      } catch (error) {
+        console.error('Gemini description error:', error);
+      }
+    }
+    
+    // Fallback to simple description
+    if (!description) {
+      description = `"${pair.original}" means "${pair.translation}" in ${settings.targetLanguage}.`;
+    }
+    
+    results.push({
+      ...pair,
+      description: description
     });
+    
+    // Small delay to avoid overwhelming APIs
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
+  
+  console.log(`Generated ${successCount}/${wordPairs.length} descriptions successfully`);
+  return results;
+}
+
+// Extract vocabulary function
+async function extractVocabulary() {
+  await extractAndShowVocabularySmart();
+}
+
+// Create flashcards from vocabulary set (legacy function)
+async function createFlashcardsFromVocab() {
+  let addedCount = 0;
+  
+  for (const word of vocabularySet) {
+    if (!flashcards.some(fc => fc.word === word)) {
+      let translation = word;
+      
+      if (chromeAIAvailable.translator) {
+        try {
+          translation = await translateText(word);
+        } catch (error) {
+          console.error('Translation error:', error);
+        }
+      }
+      
+      try {
+        await flashcardDB.addFlashcard({
+          word: word,
+          translation: translation,
+          context: '',
+          language: settings.targetLanguage
+        });
+        addedCount++;
+      } catch (error) {
+        console.error('Error adding flashcard:', error);
+      }
+    }
+  }
+  
+  // Reload flashcards from IndexedDB
+  flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+  showNotification(`Added ${addedCount} new flashcards!`, 'success');
+  updateIndexedDBStatus();
 }
 
 // Update vocabulary display
@@ -1353,10 +1935,10 @@ async function initializeTranscript() {
     observeSubtitles();
     
     // Update UI status
-    const statusElement = document.querySelector('.fluentai-status');
-    if (statusElement) {
-      statusElement.innerHTML += `<p>📝 Loaded: <strong>${transcriptSegments.length} segments</strong></p>`;
-    }
+    // const statusElement = document.querySelector('.fluentai-status');
+    // if (statusElement) {
+    //   statusElement.innerHTML += `<p>📝 Loaded: <strong>${transcriptSegments.length} segments</strong></p>`;
+    // }
     
     return true;
   } catch (error) {
@@ -1915,10 +2497,151 @@ function levenshteinDistance(str1, str2) {
   
   return matrix[str2.length][str1.length];
 }
+// Extract unique vocabulary from transcript
+async function extractVocabularyFromTranscript() {
+  if (!transcriptSegments || transcriptSegments.length === 0) {
+    showNotification('Please load subtitles first', 'error');
+    return [];
+  }
+  
+  const fullText = transcriptSegments.map(seg => seg.text).join(' ');
+  
+  try {
+    const prompt = `You are a language learning assistant. Extract the most useful vocabulary words from this ${getLanguageName(settings.targetLanguage)} text for a language learner.
+
+TEXT: "${fullText}"
+
+Extract 15-25 important words or short phrases (2-3 words max) that:
+1. Are commonly used in conversations
+2. Are appropriate for ${settings.difficulty || 'intermediate'} level learners
+3. Are NOT basic words like "the", "is", "a", etc.
+4. Include verbs, nouns, adjectives, and useful expressions
+5. Are actually in ${getLanguageName(settings.targetLanguage)} (validate language)
+
+Respond with JSON only:
+{
+  "vocabulary": [
+    {
+      "word": "word in ${getLanguageName(settings.targetLanguage)}",
+      "category": "verb/noun/adjective/expression",
+      "difficulty": "beginner/intermediate/advanced"
+    }
+  ]
+}`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${settings.geminiApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
+      })
+    });
+    
+    const data = await response.json();
+    const resultText = data.candidates[0].content.parts[0].text.trim();
+    
+    let jsonText = resultText;
+    if (resultText.includes('```json')) {
+      jsonText = resultText.split('```json')[1].split('```')[0].trim();
+    } else if (resultText.includes('```')) {
+      jsonText = resultText.split('```')[1].split('```')[0].trim();
+    }
+    
+    const result = JSON.parse(jsonText);
+    return result.vocabulary || [];
+  } catch (error) {
+    console.error('Error extracting vocabulary:', error);
+    showNotification('Error extracting vocabulary', 'error');
+    return [];
+  }
+}
+
+// Check if a word already exists in flashcards
+function isWordInFlashcards(word) {
+  const normalizedWord = word.toLowerCase().trim();
+  return flashcards.some(card => 
+    card.word.toLowerCase().trim() === normalizedWord ||
+    card.translation.toLowerCase().trim() === normalizedWord
+  );
+}
+
+// Validate and enrich vocabulary with Gemini
+async function validateAndEnrichVocabulary(vocabularyList) {
+  if (!vocabularyList || vocabularyList.length === 0) return [];
+  
+  const newWords = vocabularyList.filter(item => !isWordInFlashcards(item.word));
+  
+  if (newWords.length === 0) {
+    showNotification('All extracted words are already in your flashcards!', 'success');
+    return [];
+  }
+  
+  try {
+    const wordsToValidate = newWords.map(item => item.word).join(', ');
+    
+    const prompt = `You are a language learning assistant. Validate and translate these ${getLanguageName(settings.targetLanguage)} words to ${getLanguageName(settings.nativeLanguage)}.
+
+WORDS TO VALIDATE: ${wordsToValidate}
+
+For each word:
+1. Verify it's actually in ${getLanguageName(settings.targetLanguage)} (if not, skip it)
+2. Provide accurate translation to ${getLanguageName(settings.nativeLanguage)}
+3. Add a brief, helpful description or usage note (1 sentence)
+4. Provide a simple example sentence in ${getLanguageName(settings.targetLanguage)}
+
+Respond with JSON only:
+{
+  "validatedWords": [
+    {
+      "word": "${getLanguageName(settings.targetLanguage)} word",
+      "translation": "${getLanguageName(settings.nativeLanguage)} translation",
+      "description": "brief usage note",
+      "example": "example sentence in ${getLanguageName(settings.targetLanguage)}",
+      "confidence": 0-100
+    }
+  ]
+}
+
+Only include words with confidence > 70.`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${settings.geminiApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, maxOutputTokens: 3000 }
+      })
+    });
+    
+    const data = await response.json();
+    const resultText = data.candidates[0].content.parts[0].text.trim();
+    
+    let jsonText = resultText;
+    if (resultText.includes('```json')) {
+      jsonText = resultText.split('```json')[1].split('```')[0].trim();
+    } else if (resultText.includes('```')) {
+      jsonText = resultText.split('```')[1].split('```')[0].trim();
+    }
+    
+    const result = JSON.parse(jsonText);
+    return result.validatedWords || [];
+  } catch (error) {
+    console.error('Error validating vocabulary:', error);
+    return newWords.map(item => ({
+      word: item.word,
+      translation: '',
+      description: 'Translation not available',
+      example: '',
+      confidence: 50
+    }));
+  }
+}
 
 // Initialize extension
 async function init() {
   injectPageScript();
+  await initializeDB();
   await loadSettings();
   createOverlay();
   addTranscriptButton();
@@ -2000,4 +2723,400 @@ function updateAPIStatusDisplay() {
   // Update Gemini status
   document.getElementById('gemini-status').innerHTML = 
     `🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong>`;
+}// Show vocabulary selection UI
+async function showVocabularySelector(validatedWords) {
+  if (!validatedWords || validatedWords.length === 0) {
+    showNotification('No new vocabulary found', 'info');
+    return;
+  }
+  
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (!vocabTab) return;
+  
+  vocabTab.innerHTML = `
+    <div class="vocab-extraction">
+      <h3>📚 Found ${validatedWords.length} New Words</h3>
+      <p class="vocab-subtitle">Select words to add to your flashcards</p>
+      
+      <div class="vocab-actions">
+        <button id="select-all-vocab" class="action-btn">Select All</button>
+        <button id="deselect-all-vocab" class="action-btn">Deselect All</button>
+        <button id="add-selected-vocab" class="primary-btn">Add Selected (0)</button>
+      </div>
+      
+      <div id="vocab-list" class="vocab-list"></div>
+    </div>
+  `;
+  
+  const vocabList = document.getElementById('vocab-list');
+  const addSelectedBtn = document.getElementById('add-selected-vocab');
+  
+  validatedWords.forEach((item, index) => {
+    const vocabItem = document.createElement('div');
+    vocabItem.className = 'vocab-item';
+    vocabItem.innerHTML = `
+      <input type="checkbox" id="vocab-${index}" class="vocab-checkbox" data-index="${index}" checked>
+      <div class="vocab-content">
+        <div class="vocab-word">
+          <strong>${item.word}</strong>
+          <span class="confidence-badge">${item.confidence}% confident</span>
+        </div>
+        <div class="vocab-translation">${item.translation || 'Translation pending...'}</div>
+        <div class="vocab-description">${item.description || ''}</div>
+        ${item.example ? `<div class="vocab-example">💬 ${item.example}</div>` : ''}
+      </div>
+    `;
+    vocabList.appendChild(vocabItem);
+  });
+  
+  function updateSelectedCount() {
+    const selected = document.querySelectorAll('.vocab-checkbox:checked').length;
+    addSelectedBtn.textContent = `Add Selected (${selected})`;
+    addSelectedBtn.disabled = selected === 0;
+  }
+  
+  updateSelectedCount();
+  
+  document.getElementById('select-all-vocab').addEventListener('click', () => {
+    document.querySelectorAll('.vocab-checkbox').forEach(cb => cb.checked = true);
+    updateSelectedCount();
+  });
+  
+  document.getElementById('deselect-all-vocab').addEventListener('click', () => {
+    document.querySelectorAll('.vocab-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedCount();
+  });
+  
+  vocabList.addEventListener('change', updateSelectedCount);
+  
+  addSelectedBtn.addEventListener('click', async () => {
+    const selectedCheckboxes = document.querySelectorAll('.vocab-checkbox:checked');
+    const selectedWords = Array.from(selectedCheckboxes).map(cb => {
+      const index = parseInt(cb.dataset.index);
+      return validatedWords[index];
+    });
+    
+    if (selectedWords.length === 0) return;
+    
+    addSelectedBtn.disabled = true;
+    addSelectedBtn.textContent = 'Adding...';
+    
+    for (const item of selectedWords) {
+      const flashcard = {
+        word: item.word,
+        translation: item.translation,
+        context: item.example || '',
+        addedDate: Date.now(),
+        reviewCount: 0,
+        correctCount: 0,
+        lastReview: null,
+        nextReview: Date.now(),
+        description: item.description || ''
+      };
+      
+      flashcards.push(flashcard);
+    }
+    
+    await chrome.storage.sync.set({ flashcards });
+    
+    showNotification(`Added ${selectedWords.length} words to flashcards!`, 'success');
+    
+    vocabTab.innerHTML = `
+      <div class="success-message">
+        <h3>✅ Success!</h3>
+        <p>${selectedWords.length} words added to your flashcards</p>
+        <button id="extract-more-vocab" class="primary-btn">Extract More Words</button>
+      </div>
+    `;
+    
+    document.getElementById('extract-more-vocab').addEventListener('click', extractAndShowVocabulary);
+  });
+  
+  switchTab('vocab');
+}
+
+// Main function to extract and show vocabulary
+async function extractAndShowVocabulary() {
+  if (!settings.geminiApiKey) {
+    showNotification('Please set your Gemini API key in settings', 'error');
+    switchTab('settings');
+    return;
+  }
+  
+  if (!transcriptSegments || transcriptSegments.length === 0) {
+    showNotification('Please load subtitles first', 'error');
+    return;
+  }
+  
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (vocabTab) {
+    vocabTab.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <h3>🔍 Analyzing Video Vocabulary...</h3>
+        <p>Extracting unique words from subtitles</p>
+      </div>
+    `;
+    switchTab('vocab');
+  }
+  
+  const vocabulary = await extractVocabularyFromTranscript();
+  
+  if (vocabulary.length === 0) {
+    vocabTab.innerHTML = `
+      <div class="error-message">
+        <h3>❌ No Vocabulary Found</h3>
+        <p>Unable to extract vocabulary from this video</p>
+        <button id="retry-extraction" class="primary-btn">Try Again</button>
+      </div>
+    `;
+    document.getElementById('retry-extraction').addEventListener('click', extractAndShowVocabulary);
+    return;
+  }
+  
+  vocabTab.innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <h3>✨ Validating & Translating...</h3>
+      <p>Found ${vocabulary.length} words, checking translations</p>
+    </div>
+  `;
+  
+  const validatedWords = await validateAndEnrichVocabulary(vocabulary);
+  
+  await showVocabularySelector(validatedWords);
+}
+
+// ============================================================================
+// CHROME AI TRANSLATOR READINESS CHECK & FALLBACK SYSTEM
+// ============================================================================
+
+// Check if Chrome AI Translator is ready for a language pair
+async function checkTranslatorReadiness(sourceLang, targetLang) {
+  try {
+    const result = await chromeAIBridge('checkTranslatorReady', {
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang
+    });
+    
+    return result;
+  } catch (error) {
+    console.error('Error checking translator readiness:', error);
+    return { ready: false, status: 'error' };
+  }
+}
+
+// Wait for translator to download (with progress updates)
+async function waitForTranslatorDownload(sourceLang, targetLang, onProgress) {
+  console.log(`Waiting for ${sourceLang} → ${targetLang} translator to download...`);
+  
+  const maxWaitTime = 60000; // 60 seconds max
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < maxWaitTime) {
+    const status = await checkTranslatorReadiness(sourceLang, targetLang);
+    
+    if (status.ready) {
+      console.log('Translator is ready!');
+      return true;
+    }
+    
+    if (status.status === 'downloading') {
+      if (onProgress) {
+        onProgress(status.progress || 0);
+      }
+    }
+    
+    // Wait 1 second before checking again
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  console.warn('Translator download timeout');
+  return false;
+}
+
+// Improved translation function with fallbacks
+async function translateWordSmart(word, sourceLang, targetLang) {
+  console.log(`Translating: "${word}" (${sourceLang} → ${targetLang})`);
+  
+  // Strategy 1: Try Chrome AI Translator
+  try {
+    const result = await chromeAIBridge('translate', {
+      text: word,
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang
+    });
+    
+    if (result.success && result.translation) {
+      const translation = result.translation.trim();
+      
+      // Check if translation actually happened (not just echoing input)
+      if (translation.toLowerCase() !== word.toLowerCase()) {
+        console.log(`✅ Chrome AI Translator: "${word}" → "${translation}"`);
+        return {
+          translation: translation,
+          confidence: 80,
+          source: 'chrome-ai-translator',
+          method: 'direct'
+        };
+      } else {
+        console.warn(`⚠️ Chrome AI returned unchanged: "${word}" → "${translation}"`);
+      }
+    }
+  } catch (error) {
+    console.error('Chrome AI Translator error:', error);
+  }
+  
+  // Strategy 2: Try Chrome AI Writer as fallback
+  if (chromeAIAvailable.writer) {
+    try {
+      console.log(`Trying Chrome AI Writer fallback for "${word}"...`);
+      
+      const prompt = `Translate the ${sourceLang} word "${word}" to ${targetLang}. 
+Provide ONLY the ${targetLang} translation, nothing else. 
+Do not include the original word, explanations, or punctuation.`;
+      
+      const result = await chromeAIBridge('generateContent', {
+        prompt: prompt,
+        context: `Simple word translation: ${sourceLang} to ${targetLang}`
+      });
+      
+      if (result.success && result.content) {
+        const translation = result.content.trim()
+          .replace(/['"`.]/g, '') // Remove quotes and punctuation
+          .split('\n')[0] // Take first line only
+          .trim();
+        
+        if (translation && translation.toLowerCase() !== word.toLowerCase()) {
+          console.log(`✅ Chrome AI Writer: "${word}" → "${translation}"`);
+          return {
+            translation: translation,
+            confidence: 75,
+            source: 'chrome-ai-writer',
+            method: 'fallback'
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Chrome AI Writer error:', error);
+    }
+  }
+  
+  // Strategy 3: Try Gemini if available
+  if (settings.geminiApiKey) {
+    try {
+      console.log(`Trying Gemini fallback for "${word}"...`);
+      
+      const prompt = `Translate this ${sourceLang} word to ${targetLang}: "${word}"
+Respond with ONLY the ${targetLang} translation. One word or short phrase only, no explanation.`;
+      
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${settings.geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 50
+          }
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const translation = data.candidates[0].content.parts[0].text.trim()
+          .replace(/['"`.]/g, '')
+          .split('\n')[0]
+          .trim();
+        
+        if (translation && translation.toLowerCase() !== word.toLowerCase()) {
+          console.log(`✅ Gemini: "${word}" → "${translation}"`);
+          return {
+            translation: translation,
+            confidence: 90,
+            source: 'gemini-direct',
+            method: 'fallback'
+          };
+        }
+      }
+    } catch (error) {
+      console.error('Gemini translation error:', error);
+    }
+  }
+  
+  // Strategy 4: Last resort - return original with warning
+  console.error(`❌ All translation methods failed for "${word}"`);
+  return {
+    translation: word,
+    confidence: 20,
+    source: 'failed',
+    method: 'none',
+    error: true
+  };
+}
+
+// Improved batch translation with smart fallbacks
+async function translateWordsWithSmartFallback(words, onProgress) {
+  console.log('Phase 2: Smart Translation with Fallbacks...');
+  
+  // First, check if translator is ready
+  const translatorStatus = await checkTranslatorReadiness(
+    settings.targetLanguage,
+    settings.nativeLanguage
+  );
+  
+  if (translatorStatus.status === 'after-download') {
+    console.log('Translator needs to download...');
+    showNotification('Downloading translation model, please wait...', 'info');
+    
+    const downloaded = await waitForTranslatorDownload(
+      settings.targetLanguage,
+      settings.nativeLanguage,
+      (progress) => {
+        if (onProgress) {
+          onProgress(`Downloading translator: ${progress}%`);
+        }
+      }
+    );
+    
+    if (!downloaded) {
+      showNotification('Translator download timeout, using fallback methods', 'warning');
+    }
+  }
+  
+  const translations = [];
+  const totalWords = words.length;
+  
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    
+    if (onProgress) {
+      onProgress(`Translating ${i + 1}/${totalWords}: "${word}"`);
+    }
+    
+    const result = await translateWordSmart(
+      word,
+      settings.targetLanguage,
+      settings.nativeLanguage
+    );
+    
+    if (!result.error) {
+      translations.push({
+        original: word,
+        translation: result.translation,
+        confidence: result.confidence,
+        source: result.source,
+        method: result.method
+      });
+    } else {
+      console.warn(`Skipping word "${word}" - all translation methods failed`);
+    }
+    
+    // Small delay to avoid overwhelming APIs
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  console.log(`Successfully translated ${translations.length}/${totalWords} words`);
+  
+  return translations;
 }

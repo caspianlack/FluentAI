@@ -35,6 +35,43 @@
           result = { success: true, apis };
           break;
           
+        case 'checkTranslatorReady':
+          // Check if translator is ready for specific language pair
+          try {
+            if (apis.translator) {
+              const canTranslate = await self.Translator.canTranslate({
+                sourceLanguage: data.sourceLanguage,
+                targetLanguage: data.targetLanguage
+              });
+              result = {
+                success: true,
+                ready: canTranslate === 'readily',
+                status: canTranslate,
+                message: canTranslate === 'readily' ? 'Ready' : 
+                         canTranslate === 'after-download' ? 'Needs download' : 
+                         'Not available'
+              };
+            } else if (apis.translatorNew) {
+              const canTranslate = await self.translation.canTranslate({
+                sourceLanguage: data.sourceLanguage,
+                targetLanguage: data.targetLanguage
+              });
+              result = {
+                success: true,
+                ready: canTranslate === 'readily',
+                status: canTranslate,
+                message: canTranslate === 'readily' ? 'Ready' : 
+                         canTranslate === 'after-download' ? 'Needs download' : 
+                         'Not available'
+              };
+            } else {
+              result = { success: false, error: 'Translator API not available' };
+            }
+          } catch (error) {
+            result = { success: false, error: error.message };
+          }
+          break;
+          
         case 'translate':
           if (!translatorInstance) {
             if (apis.translatorNew) {
