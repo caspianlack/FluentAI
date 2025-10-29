@@ -357,13 +357,7 @@ function createOverlay() {
         </div>
         
         <!-- Translate Tab -->
-        <div class="tab-content active" id="translate-tab">
-          <div class="fluentai-status">
-            <p>🎯 Learning: <strong>${getLanguageName(settings.targetLanguage)}</strong></p>
-            <p>📺 Auto-pause: <strong>${settings.autoTranslate ? 'ON' : 'OFF'}</strong></p>
-            <p>⏸️ Status: <strong id="pause-status">Waiting for subtitles...</strong></p>
-          </div>
-          
+        <div class="tab-content active" id="translate-tab">          
           <div class="fluentai-exercise">
             <div class="fluentai-subtitle" id="subtitle-display">
               <span class="subtitle-text">Waiting for subtitles...</span>

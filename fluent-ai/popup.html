@@ -15,7 +15,6 @@
     <!-- Navigation Tabs -->
     <div class="popup-tabs">
       <button class="popup-tab active" data-tab="settings">Settings</button>
-      <button class="popup-tab" data-tab="flashcards">Flashcards</button>
       <button class="popup-tab" data-tab="stats">Stats</button>
       <button class="popup-tab" data-tab="apis">APIs</button>
     </div>
@@ -141,56 +140,6 @@
       <div id="settingsStatus" class="status-message" style="display: none;"></div>
     </div>
     
-    <!-- Flashcards Tab -->
-    <div class="popup-tab-content" id="flashcards-tab" style="display: none;">
-      <div class="flashcards-header">
-        <div class="flashcard-stats">
-          <div class="stat">
-            <span class="stat-number" id="totalFlashcards">0</span>
-            <span class="stat-label">Total Cards</span>
-          </div>
-          <div class="stat">
-            <span class="stat-number" id="dueFlashcards">0</span>
-            <span class="stat-label">Due Today</span>
-          </div>
-        </div>
-      </div>
-      
-      <div class="flashcard-actions">
-        <button id="addFlashcard" class="action-btn">
-          <span class="btn-icon">➕</span>
-          Add New Card
-        </button>
-        <button id="practiceFlashcards" class="action-btn">
-          <span class="btn-icon">📝</span>
-          Practice Now
-        </button>
-        <button id="exportFlashcards" class="action-btn">
-          <span class="btn-icon">📥</span>
-          Export
-        </button>
-        <button id="importFlashcards" class="action-btn">
-          <span class="btn-icon">📤</span>
-          Import
-        </button>
-      </div>
-      
-      <div id="flashcardForm" class="flashcard-form" style="display: none;">
-        <h3>Add New Flashcard</h3>
-        <input type="text" id="flashcardWord" placeholder="Word/Phrase in target language">
-        <input type="text" id="flashcardTranslation" placeholder="Translation in native language">
-        <textarea id="flashcardContext" placeholder="Example sentence (optional)"></textarea>
-        <div class="form-actions">
-          <button id="saveFlashcard" class="primary-btn small">Save</button>
-          <button id="cancelFlashcard" class="secondary-btn small">Cancel</button>
-        </div>
-      </div>
-      
-      <div class="flashcard-list" id="flashcardList">
-        <!-- Flashcards will be loaded here -->
-      </div>
-    </div>
-    
     <!-- Stats Tab -->
     <div class="popup-tab-content" id="stats-tab" style="display: none;">
       <div class="stats-overview">
@@ -282,7 +231,6 @@
   
   <!-- Import file input (hidden) -->
   <input type="file" id="importFile" accept=".json" style="display: none;">
-  <script src="flashcardDB.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>
