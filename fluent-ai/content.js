@@ -266,17 +266,21 @@ async function translateText(text, sourceLanguage = null, targetLanguage = null)
     throw new Error('Chrome Translator API not available');
   }
   
-  const result = await chromeAIBridge('translate', {
-    text: word,
-    sourceLanguage: settings.targetLanguage,
-    targetLanguage: settings.nativeLanguage
-  });
-  
-  if (result.success && result.translation) {
-    translationInput.value = result.translation;
-    showNotification('Translation added!', 'success');
-  } else {
-    showNotification('Translation failed', 'error');
+  try {
+    const result = await chromeAIBridge('translate', {
+      text: text,
+      sourceLanguage: sourceLanguage || settings.targetLanguage,
+      targetLanguage: targetLanguage || settings.nativeLanguage
+    });
+    
+    if (result.success && result.translation) {
+      return result.translation;
+    } else {
+      throw new Error('Translation failed: ' + (result.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Chrome AI translation error:', error);
+    throw error;
   }
 }
 
@@ -369,8 +373,13 @@ function createOverlay() {
               <button class="speak-btn" id="speak-btn">🔊</button>
             </div>
             <input type="text" id="fluentai-input" placeholder="Type the translation..." />
-            <button id="fluentai-submit">Check Translation</button>
-            <button class="fluentai-skip-btn" id="skip-btn">Skip</button>
+            
+            <!-- Button Box Container -->
+            <div class="button-box">
+              <button id="fluentai-submit">Check Translation</button>
+              <button class="fluentai-skip-btn" id="skip-btn">Skip</button>
+            </div>
+            
             <div class="fluentai-feedback" id="fluentai-feedback"></div>
           </div>
         </div>
@@ -391,6 +400,10 @@ function createOverlay() {
             <button class="action-btn" id="export-flashcards-btn">📥 Export</button>
             <button class="action-btn" id="import-flashcards-btn">📤 Import</button>
           </div>
+
+          <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
+            🎬 Extract Vocabulary from Video
+          </button>
           
           <div class="search-container">
             <input type="text" id="flashcard-search" placeholder="Search existing words..." />
@@ -399,10 +412,6 @@ function createOverlay() {
           <div class="flashcard-list" id="flashcard-list">
             <p class="empty-state">No flashcards for ${getLanguageName(settings.targetLanguage)} yet.<br>Add your first one or extract vocabulary from YouTube videos!</p>
           </div>
-          
-          <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
-            🎬 Extract Vocabulary from Video
-          </button>
         </div>
         
         <!-- Stats Tab -->
@@ -701,9 +710,9 @@ function showDeleteConfirmation(card) {
         
         <p>Are you sure you want to delete this flashcard? This action cannot be undone.</p>
         
-        <div class="modal-actions">
-          <button class="action-btn" id="cancel-delete">Cancel</button>
-          <button class="danger-btn" id="confirm-delete">Delete</button>
+        <div class="button-box">
+          <button class="cancel-btn" id="cancel-delete">Cancel</button>
+          <button class="fluentai-skip-btn" id="confirm-delete">Delete</button>
         </div>
       </div>
     </div>
@@ -762,9 +771,9 @@ function showEditCardModal(card) {
           <textarea id="edit-description" rows="3">${card.description || ''}</textarea>
         </div>
         
-        <div class="form-actions">
-          <button class="action-btn" id="cancel-edit-card">Cancel</button>
-          <button class="primary-btn" id="save-edit-card">Save Changes</button>
+        <div class="button-box">
+            <button class="cancel-btn" id="cancel-edit-card">Cancel</button>
+            <button class="fluentai-skip-btn" id="save-edit-card">Save Changes</button>
         </div>
       </div>
     </div>
@@ -907,7 +916,7 @@ async function loadFlashcardList() {
   document.getElementById('flashcard-search')?.addEventListener('input', searchFlashcards);
   document.getElementById('extract-vocab-btn')?.addEventListener('click', extractAndShowVocabulary);
   
-  // Delete buttons - FIXED VERSION
+  // Delete buttons
   document.querySelectorAll('.delete-card-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -926,7 +935,7 @@ async function loadFlashcardList() {
     });
   });
   
-  // Edit buttons - FIXED VERSION
+  // Edit buttons
   document.querySelectorAll('.edit-card-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1479,34 +1488,57 @@ async function showVocabularySelectorSmart(wordPairs) {
       
       // Show success
       vocabTab.innerHTML = `
-      <div class="vocabulary-header">
-        <h3>📚 My Flashcards</h3>
-        <div class="vocabulary-stats">
-          <p>🎯 Total Cards: <span id="flashcard-count">${flashcards.length}</span></p>
-          <p>🌐 Language: <strong>${getLanguageName(settings.targetLanguage)}</strong></p>
+        <div class="vocab-scroll-container">
+          <div class="vocabulary-header">
+            <h3>📚 My Flashcards</h3>
+            <div class="vocabulary-stats">
+              <p>🎯 Total Cards: <span id="flashcard-count">${flashcards.length}</span></p>
+              <p>🌐 Language: <strong>${getLanguageName(settings.targetLanguage)}</strong></p>
+            </div>
+          </div>
+          
+          <div class="flashcard-actions">
+            <button class="action-btn" id="add-new-card-btn">➕ Add New Card</button>
+            <button class="action-btn primary-btn" id="practice-now-btn">📝 Practice Now</button>
+            <button class="action-btn" id="export-flashcards-btn">📥 Export</button>
+            <button class="action-btn" id="import-flashcards-btn">📤 Import</button>
+          </div>
+
+          <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
+            🎬 Extract Vocabulary from Video
+          </button>
+          
+          <div class="search-container">
+            <input type="text" id="flashcard-search" placeholder="Search existing words..." />
+          </div>
+          
+          <div class="flashcard-list" id="flashcard-list">
+            ${flashcards.length === 0 ? 
+              `<p class="empty-state">No flashcards for ${getLanguageName(settings.targetLanguage)} yet.<br>Add your first one or extract vocabulary from YouTube videos!</p>` 
+              : 
+              flashcards.map((card, index) => `
+                <div class="flashcard-item" data-id="${card.id}">
+                  <div class="flashcard-content">
+                    <div class="flashcard-word">
+                      <strong>${card.word}</strong>
+                      ${card.meta?.confidence ? `<span class="confidence-badge">${card.meta.confidence}%</span>` : ''}
+                    </div>
+                    <div class="flashcard-translation">
+                      ${card.translations[0]}
+                      ${card.translations.length > 1 ? `<span class="alternates"> (+${card.translations.length - 1} more)</span>` : ''}
+                    </div>
+                    ${card.description ? `<div class="flashcard-description">${card.description}</div>` : ''}
+                  </div>
+                  <div class="flashcard-actions-mini">
+                    <button class="edit-card-btn" data-id="${card.id}">✏️</button>
+                    <button class="delete-card-btn" data-id="${card.id}">🗑️</button>
+                  </div>
+                </div>
+              `).join('')
+            }
+          </div>
         </div>
-      </div>
-      
-      <div class="flashcard-actions">
-        <button class="action-btn" id="add-new-card-btn">➕ Add New Card</button>
-        <button class="action-btn primary-btn" id="practice-now-btn">📝 Practice Now</button>
-        <button class="action-btn" id="export-flashcards-btn">📥 Export</button>
-        <button class="action-btn" id="import-flashcards-btn">📤 Import</button>
-      </div>
-      
-      <div class="success-banner">
-        <h3>✅ Success!</h3>
-        <p>${selectedWords.length} words added to your flashcards</p>
-      </div>
-      
-      <div class="flashcard-list" id="flashcard-list">
-        <!-- Display the flashcards here or call loadFlashcardList() -->
-      </div>
-      
-      <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
-        🎬 Extract More Vocabulary
-      </button>
-    `;
+      `;
       
       document.getElementById('extract-more-vocab').addEventListener('click', extractAndShowVocabulary);
       document.getElementById('start-practice-now').addEventListener('click', () => startPracticeFromOverlay());
@@ -2644,263 +2676,288 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// **FIXED: Issue #2 - Check translation with proper feedback rendering**
+// check translation (chrome ai and algo w/ google gemini)
 async function checkTranslation() {
   const userInput = document.getElementById('fluentai-input')?.value.trim();
   
-  console.log('FluentAI: checkTranslation called with input:', userInput);
-  console.log('FluentAI: currentSubtitle:', currentSubtitle);
-  
-  if (!userInput || !currentSubtitle) {
-    console.log('FluentAI: Missing input or subtitle');
-    return;
-  }
-  
+  if (!userInput || !currentSubtitle) return;
+
   const feedbackDiv = document.getElementById('fluentai-feedback');
-  if (!feedbackDiv) {
-    console.error('FluentAI: Feedback div not found!');
-    return;
-  }
-  
-  // Ensure feedback div is visible and has proper structure
-  feedbackDiv.style.display = 'block';
-  feedbackDiv.style.minHeight = '60px';
   feedbackDiv.innerHTML = '<div class="fluentai-loading">Checking translation...</div>';
-  console.log('FluentAI: Showing loading state');
   
   try {
-    let correctTranslation = '';
-    let isCorrect = false;
-    let validationResult = null;
+    // Get Chrome AI translation
+    const correctTranslation = await translateText(currentSubtitle, settings.targetLanguage, settings.nativeLanguage);
     
-    // Try Chrome Translator API first
-    if (chromeAIAvailable.translator) {
-      console.log('FluentAI: Using Chrome Translator API');
-      try {
-        correctTranslation = await translateText(currentSubtitle, settings.targetLanguage, settings.nativeLanguage);
-        
-        const normalizeText = (str) => {
-          return str
-            .toLowerCase()
-            .replace(/[.,!?;:'"]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
-        };
-        
-        const normalizedInput = normalizeText(userInput);
-        const normalizedCorrect = normalizeText(correctTranslation);
-        const similarity = calculateSimilarity(normalizedInput, normalizedCorrect);
-        
-        console.log('FluentAI: Similarity score:', similarity);
-        
-        // High similarity - accept immediately (90%+)
-        if (similarity >= 0.90) {
-          isCorrect = true;
-          validationResult = {
-            correct: true,
-            feedback: 'Perfect! ✅',
-            correctAnswer: correctTranslation,
-            similarity: Math.round(similarity * 100),
-            method: 'exact'
-          };
-        } 
-        // Lower similarity - validate with Gemini if available
-        else if (settings.geminiApiKey && settings.useGeminiValidation) {
-          console.log('FluentAI: Using Gemini for semantic validation');
-          validationResult = await validateWithGemini(
-            userInput,
-            correctTranslation,
-            currentSubtitle,
-            settings.targetLanguage,
-            settings.nativeLanguage
-          );
-          validationResult.similarity = Math.round(similarity * 100);
-          isCorrect = validationResult.correct;
-        }
-        // No Gemini - use similarity threshold
-        else {
-          if (similarity >= 0.85) {
-            validationResult = {
-              correct: false,
-              feedback: 'Very close! 🤔',
-              correctAnswer: correctTranslation,
-              similarity: Math.round(similarity * 100),
-              showGeminiOption: true
-            };
-          } else if (similarity >= 0.60) {
-            validationResult = {
-              correct: false,
-              feedback: 'Close, but not quite. 🤔',
-              correctAnswer: correctTranslation,
-              similarity: Math.round(similarity * 100),
-              showGeminiOption: true
-            };
-          } else {
-            validationResult = {
-              correct: false,
-              feedback: 'Not quite right. ❌',
-              correctAnswer: correctTranslation,
-              similarity: Math.round(similarity * 100),
-              showGeminiOption: true
-            };
-          }
-        }
-        
-      } catch (error) {
-        console.error('Chrome Translator error:', error);
+    // Use Chrome AI Writer to evaluate the similarity and give feedback
+    const evaluation = await evaluateTranslationWithAI(
+      userInput, 
+      correctTranslation, 
+      currentSubtitle,
+      settings.targetLanguage,
+      settings.nativeLanguage
+    );
+    
+    // Display AI's evaluation
+    displayEvaluationResult(evaluation, userInput, correctTranslation, currentSubtitle);
+    
+  } catch (error) {
+    feedbackDiv.innerHTML = '<div class="error">Error checking translation</div>';
+  }
+}
+
+async function evaluateTranslationWithAI(userAnswer, chromeTranslation, sourceText, sourceLang, targetLang) {
+  const prompt = `You are a friendly language tutor. A student just translated this ${sourceLang} phrase to ${targetLang}.
+
+  SOURCE (${sourceLang}): "${sourceText}"
+  STUDENT'S TRANSLATION: "${userAnswer}"
+  EXPECTED TRANSLATION: "${chromeTranslation}"
+
+  Evaluate the student's translation and respond directly to them in first person.
+
+  Consider:
+  - Is the meaning correct? (most important)
+  - Are there minor spelling/grammar issues that don't affect understanding?
+  - Is the phrasing natural in ${targetLang}?
+  - Are there different but valid ways to say the same thing?
+
+  Respond with JSON only:
+  {
+    "correct": true/false,
+    "confidence": 0-100,
+    "feedback": "Direct feedback to the student in first person (2-3 sentences max)",
+    "note": "Brief explanation of what was correct/incorrect"
+  }`;
+
+  try {
+    // Try Chrome AI Writer first
+    const result = await chromeAIBridge('generateContent', {
+      prompt: prompt,
+      context: 'Translation evaluation for language learning'
+    });
+    
+    if (result.success) {
+      return parseAIResponse(result.content);
+    }
+  } catch (error) {
+    console.log('Chrome AI Writer failed, using simple similarity check');
+  }
+  
+  // Fallback to simple similarity check
+  return fallbackSimilarityCheck(userAnswer, chromeTranslation);
+}
+
+function parseAIResponse(content) {
+  try {
+    // Extract JSON from the AI response
+    let jsonText = content.trim();
+    
+    // Remove markdown code blocks if present
+    if (jsonText.includes('```json')) {
+      jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+    } else if (jsonText.includes('```')) {
+      jsonText = jsonText.split('```')[1].split('```')[0].trim();
+    }
+    
+    const result = JSON.parse(jsonText);
+    return result;
+  } catch (error) {
+    console.error('Failed to parse AI response:', error);
+    // Fallback to simple response
+    return {
+      correct: false,
+      confidence: 50,
+      feedback: 'Unable to evaluate translation',
+      note: 'Please try again'
+    };
+  }
+}
+
+function fallbackSimilarityCheck(userAnswer, correctTranslation) {
+  const similarity = calculateEnhancedSimilarity(userAnswer, correctTranslation);
+  
+  return {
+    correct: similarity.score >= 0.75,
+    confidence: Math.round(similarity.score * 100),
+    feedback: similarity.score >= 0.75 ? 'Good job! ✅' : 'Not quite right ❌',
+    note: similarity.score >= 0.75 ? 'Close enough!' : 'Try again'
+  };
+}
+
+function calculateEnhancedSimilarity(str1, str2) {
+  const normalizeText = (str) => {
+    return str
+      .toLowerCase()
+      .replace(/[.,!?;:'"()]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const normalized1 = normalizeText(str1);
+  const normalized2 = normalizeText(str2);
+
+  // Exact match
+  if (normalized1 === normalized2) {
+    return { score: 1.0, breakdown: 'exact match' };
+  }
+
+  // Simple Levenshtein similarity for the whole string
+  const similarity = calculateSimilarity(normalized1, normalized2);
+  
+  return {
+    score: similarity,
+    breakdown: {
+      similarity: Math.round(similarity * 100)
+    }
+  };
+}
+
+function calculateWordSimilarity(word1, word2) {
+  if (word1 === word2) return 1.0;
+  
+  // General linguistic patterns instead of hardcoded words
+  const distance = levenshteinDistance(word1, word2);
+  const maxLength = Math.max(word1.length, word2.length);
+  const baseSimilarity = (maxLength - distance) / maxLength;
+  
+  // Boost similarity for common linguistic variations
+  if (baseSimilarity >= 0.7) {
+    // Common variation patterns
+    const variations = [
+      // Missing/extra letters (hello/hell, little/littl)
+      { pattern: /(.{3,})[aeiou]?$/, weight: 0.1 },
+      // Common spelling variations (sad/sadd)
+      { pattern: /(.{2,})(.)\2?$/, weight: 0.1 },
+      // Apostrophe variations (am/'m/im)
+      { pattern: /^'?(.+?)'?$/, weight: 0.15 },
+      // Short forms (I am/I'm)
+      { pattern: /^i\s(.+)/, replacement: "i$1", weight: 0.2 }
+    ];
+    
+    let similarityBoost = 0;
+    
+    for (const variation of variations) {
+      let modified1 = word1;
+      let modified2 = word2;
+      
+      if (variation.replacement) {
+        modified1 = word1.replace(/^i\s(.+)/, "i$1");
+        modified2 = word2.replace(/^i\s(.+)/, "i$1");
+      }
+      
+      if (modified1 === modified2) {
+        similarityBoost += variation.weight;
       }
     }
     
-    // Fallback to Gemini if Chrome AI unavailable
-    if (!correctTranslation && settings.geminiApiKey) {
-      const response = await translateWithGemini(currentSubtitle);
-      if (response) {
-        correctTranslation = response;
-        const normalizeText = (str) => str.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
-        isCorrect = normalizeText(userInput) === normalizeText(correctTranslation);
-        validationResult = {
-          correct: isCorrect,
-          feedback: isCorrect ? 'Perfect! ✅' : 'Not quite right. ❌',
-          correctAnswer: correctTranslation
-        };
-      }
-    }
+    return Math.min(1.0, baseSimilarity + similarityBoost);
+  }
+  
+  return baseSimilarity;
+}
+
+function displayEvaluationResult(evaluation, userInput, correctTranslation, sourceText) {
+  const feedbackDiv = document.getElementById('fluentai-feedback');
+  
+  if (evaluation.correct) {
+    feedbackDiv.innerHTML = `
+      <div class="success">${evaluation.feedback}</div>
+      <div class="correct-answer">"${sourceText}" → "${correctTranslation}"</div>
+      ${evaluation.note ? `<div class="note">${evaluation.note}</div>` : ''}
+    `;
+    updateQuizStats(1, 1);
     
-    // No translation available
-    if (!correctTranslation) {
-      correctTranslation = `[Translation for: ${currentSubtitle}]`;
-      validationResult = {
-        correct: false,
-        feedback: 'Unable to validate translation.',
-        correctAnswer: correctTranslation
-      };
-    }
-    
-    // Display feedback
-    if (isCorrect) {
-      let successMessage = `
-        <div class="success">✅ ${validationResult.feedback}</div>
-        <div class="correct-answer">"${currentSubtitle}" → "${validationResult.correctAnswer}"</div>
-      `;
+    // Auto-play after correct answer with reading time
+    if (settings.autoPlayAfterCorrect !== false) {
+      // Show countdown timer
+      let countdown = 3; // 3 seconds to read feedback
+      const countdownElement = document.createElement('div');
+      countdownElement.className = 'auto-play-countdown';
+      countdownElement.innerHTML = `Auto-playing in ${countdown} seconds...`;
+      feedbackDiv.appendChild(countdownElement);
       
-      if (validationResult.chromeWasWrong) {
-        successMessage += `<div style="margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
-          ⭐ <strong>Great job!</strong> Your translation was more natural than Chrome's literal translation.
-        </div>`;
-      }
-      
-      feedbackDiv.innerHTML = successMessage;
-      updateQuizStats(1, 1);
-      
-      if (settings.autoPlayAfterCorrect !== false) {
-        setTimeout(() => {
+      const countdownInterval = setInterval(() => {
+        countdown--;
+        countdownElement.textContent = `Auto-playing in ${countdown} seconds...`;
+        
+        if (countdown <= 0) {
+          clearInterval(countdownInterval);
           skipSubtitle();
           if (settings.autoTranslate) {
             document.querySelector('video')?.play();
           }
-        }, 4000); // 4 seconds to read Gemini feedback
-      } else {
-        // Just clear input, don't skip - let user click Next
-        document.getElementById('fluentai-input').value = '';
-      }
-
+        }
+      }, 1000);
     } else {
-      let feedbackMessage = `
-        <div class="incorrect">❌ ${validationResult.feedback}</div>
-        <div class="correct-answer"><strong>Better translation:</strong> "${validationResult.correctAnswer}"</div>
-      `;
-      
-      if (validationResult.similarity) {
-        feedbackMessage += `<div class="similarity">Similarity: ${validationResult.similarity}%</div>`;
-      }
-      
-      if (validationResult.chromeWasWrong) {
-        feedbackMessage += `<div style="margin-top: 8px; padding: 8px; background: #fee2e2; border-radius: 6px; font-size: 13px; color: #991b1b;">
-          ⚠️ Note: Chrome AI had a less natural translation for this phrase.
-        </div>`;
-      }
-
-      if (settings.geminiApiKey) {
-        feedbackMessage += `
-          <button id="verify-with-gemini" style="
-            width: 100%;
-            margin-top: 10px;
-            padding: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            transition: all 0.2s;
-          ">
-            🤖 Think this is wrong? Verify with Gemini
-          </button>
-        `;
-      }
-      
-      feedbackDiv.innerHTML = feedbackMessage;
-
-      const verifyButton = document.getElementById('verify-with-gemini');
-
-      if (verifyButton) {
-        verifyButton.addEventListener('click', async () => {
-          verifyButton.textContent = '⏳ Checking with Gemini...';
-          verifyButton.disabled = true;
-          
-          const geminiResult = await validateWithGemini(
-            userInput,
-            correctTranslation,
-            currentSubtitle,
-            settings.targetLanguage,
-            settings.nativeLanguage
-          );
-          
-          let geminiMessage = `
-            <div class="${geminiResult.correct ? 'success' : 'incorrect'}">
-              ${geminiResult.correct ? '✅' : '❌'} Gemini says: ${geminiResult.feedback}
-            </div>
-            <div class="correct-answer"><strong>Gemini's translation:</strong> "${geminiResult.correctAnswer}"</div>
-          `;
-          
-          if (geminiResult.chromeWasWrong) {
-            geminiMessage += `<div style="margin-top: 8px; padding: 8px; background: #fef3c7; border-radius: 6px; font-size: 13px; color: #92400e;">
-              ⭐ Chrome AI's translation was less accurate. Your answer was ${geminiResult.correct ? 'correct' : 'closer'}!
-            </div>`;
-          }
-          
-          feedbackDiv.innerHTML = geminiMessage;
-          
-          // Update stats if Gemini says user was actually correct
-          if (geminiResult.correct) {
-            updateQuizStats(1, 0); // Add a correct, don't add another attempt
-            
-            // Handle auto-play if enabled
-            if (settings.autoPlayAfterCorrect !== false) {
-              setTimeout(() => {
-                skipSubtitle();
-                if (settings.autoTranslate) {
-                  document.querySelector('video')?.play();
-                }
-              }, 4000); // 4 seconds to read Gemini feedback
-            } else {
-              // Just clear input, don't skip - let user click Next
-              document.getElementById('fluentai-input').value = '';
-            }
-          }
-        });
-      }
-
-      updateQuizStats(0, 1);
+      // Just clear input, don't skip - let user click Next
+      document.getElementById('fluentai-input').value = '';
     }
-    
-  } catch (error) {
-    console.error('Translation check error:', error);
+
+  } else {
     feedbackDiv.innerHTML = `
-      <div class="error">Error checking translation. Please try again.</div>
-      <div class="correct-answer">Original: "${currentSubtitle}"</div>
+      <div class="incorrect">${evaluation.feedback}</div>
+      <div class="correct-answer">Suggested: "${correctTranslation}"</div>
+      ${evaluation.note ? `<div class="note">${evaluation.note}</div>` : ''}
+      ${settings.geminiApiKey ? `
+        <button id="verify-with-gemini" class="gemini-verify-btn">
+          🤖 Think this is wrong? Verify with Gemini
+        </button>
+      ` : ''}
     `;
+    
+    document.getElementById('verify-with-gemini')?.addEventListener('click', 
+      () => verifyWithGemini(userInput, correctTranslation, sourceText));
+    
+    updateQuizStats(0, 1);
+  }
+}
+
+async function verifyWithGemini(userInput, chromeTranslation, sourceText) {
+  const button = document.getElementById('verify-with-gemini');
+  button.textContent = '⏳ Asking Gemini...';
+  button.disabled = true;
+  
+  const result = await validateWithGemini(
+    userInput, 
+    chromeTranslation, 
+    sourceText,
+    settings.targetLanguage,
+    settings.nativeLanguage
+  );
+  
+  // Update UI with Gemini's verdict
+  const feedbackDiv = document.getElementById('fluentai-feedback');
+  feedbackDiv.innerHTML = `
+    <div class="${result.correct ? 'success' : 'incorrect'}">
+      ${result.correct ? '✅' : '❌'} Gemini: ${result.feedback}
+    </div>
+    <div class="correct-answer">"${result.correctAnswer}"</div>
+  `;
+  
+  if (result.correct) {
+    updateQuizStats(1, 0);
+    
+    // Auto-play after Gemini corrects the answer
+    if (settings.autoPlayAfterCorrect !== false) {
+      let countdown = 4; // 4 seconds for Gemini feedback
+      const countdownElement = document.createElement('div');
+      countdownElement.className = 'auto-play-countdown';
+      countdownElement.innerHTML = `Auto-playing in ${countdown} seconds...`;
+      feedbackDiv.appendChild(countdownElement);
+      
+      const countdownInterval = setInterval(() => {
+        countdown--;
+        countdownElement.textContent = `Auto-playing in ${countdown} seconds...`;
+        
+        if (countdown <= 0) {
+          clearInterval(countdownInterval);
+          skipSubtitle();
+          if (settings.autoTranslate) {
+            document.querySelector('video')?.play();
+          }
+        }
+      }, 1000);
+    }
   }
 }
 

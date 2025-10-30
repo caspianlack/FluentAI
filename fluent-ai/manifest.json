@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "FluentAI Pro 111- Advanced Language Learning",
+  "name": "FluentAI - Dynamic Language Learning",
   "version": "2.0.0",
-  "description": "AI-powered language learning with quizzes, flashcards, and Chrome's built-in AI APIs",
+  "description": "AI-powered language learning with quizzes, flashcards, and Chrome's built-in AI APIs levering youtube content in the languages you want to learn.",
   "permissions": [
     "storage",
     "activeTab",
