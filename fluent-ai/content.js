@@ -389,7 +389,7 @@ function createOverlay() {
           </div>
           
           <div class="search-container">
-            <input type="text" id="flashcard-search" placeholder="🔍 Search all words..." />
+            <input type="text" id="flashcard-search" placeholder="Search existing words..." />
           </div>
           
           <div class="flashcard-list" id="flashcard-list">
@@ -544,6 +544,8 @@ function setupEventListeners() {
   document.getElementById('import-flashcards-btn')?.addEventListener('click', importFlashcards);
   document.getElementById('flashcard-search')?.addEventListener('input', searchFlashcards);
   document.getElementById('extract-vocab-btn')?.addEventListener('click', extractAndShowVocabulary);
+
+  loadFlashcardList();
 }
 
 // Show Add Card Modal
@@ -566,7 +568,7 @@ function showAddCardModal() {
         
         <div class="form-group">
           <label for="new-translation">${getLanguageName(settings.nativeLanguage)} Translation:</label>
-          <input type="text" id="new-translation" placeholder="Enter translation..." />
+          <input type="text" id="new-translation" placeholder="Enter translations (comma-separated: cold, flu, illness)" />
           <button class="action-btn" id="auto-translate-btn">🌐 Auto-Translate</button>
         </div>
         
@@ -632,11 +634,22 @@ async function autoTranslateNewCard() {
 // Save new card
 async function saveNewCard() {
   const word = document.getElementById('new-word')?.value.trim();
-  const translation = document.getElementById('new-translation')?.value.trim();
+  const translationInput = document.getElementById('new-translation')?.value.trim();
   const description = document.getElementById('new-description')?.value.trim();
   
-  if (!word || !translation) {
+  if (!word || !translationInput) {
     showNotification('Please fill in both word and translation', 'error');
+    return;
+  }
+  
+  // Parse comma-separated translations
+  const translations = translationInput
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+  
+  if (translations.length === 0) {
+    showNotification('Please enter at least one translation', 'error');
     return;
   }
   
@@ -646,7 +659,7 @@ async function saveNewCard() {
       language: settings.targetLanguage,
       originLanguage: settings.targetLanguage,
       targetLanguage: settings.nativeLanguage,
-      translations: [translation],
+      translations: translations, // Array of translations
       senses: [],
       description: description,
       meta: {
@@ -658,7 +671,7 @@ async function saveNewCard() {
     // Reload flashcards
     flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
     
-    showNotification('Flashcard added!', 'success');
+    showNotification(`Flashcard added with ${translations.length} translation(s)!`, 'success');
     loadFlashcardList();
     updateIndexedDBStatus();
   } catch (error) {
@@ -667,11 +680,168 @@ async function saveNewCard() {
   }
 }
 
+// Show custom delete confirmation modal
+function showDeleteConfirmation(card) {
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (!vocabTab) return;
+  
+  vocabTab.innerHTML = `
+    <div class="delete-confirmation-modal">
+      <div class="modal-content">
+        <h3>🗑️ Delete Flashcard?</h3>
+        
+        <div class="card-preview">
+          <div class="preview-word"><strong>${card.word}</strong></div>
+          <div class="preview-translation">${card.translations ? card.translations[0] : 'No translation'}</div>
+        </div>
+        
+        <p>Are you sure you want to delete this flashcard? This action cannot be undone.</p>
+        
+        <div class="modal-actions">
+          <button class="action-btn" id="cancel-delete">Cancel</button>
+          <button class="danger-btn" id="confirm-delete">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  switchTab('vocabulary');
+  
+  // Cancel button
+  document.getElementById('cancel-delete')?.addEventListener('click', () => {
+    loadFlashcardList();
+  });
+  
+  // Confirm delete button
+  document.getElementById('confirm-delete')?.addEventListener('click', async () => {
+    try {
+      await flashcardDB.deleteFlashcard(card.id);
+      flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+      showNotification('Flashcard deleted', 'success');
+      loadFlashcardList();
+      updateIndexedDBStatus();
+    } catch (error) {
+      console.error('Error deleting flashcard:', error);
+      showNotification('Error deleting flashcard', 'error');
+      loadFlashcardList();
+    }
+  });
+}
+
+// Show edit card modal
+function showEditCardModal(card) {
+  const vocabTab = document.getElementById('vocabulary-tab');
+  if (!vocabTab) return;
+  
+  const translationsText = card.translations ? card.translations.join(', ') : '';
+  
+  vocabTab.innerHTML = `
+    <div class="add-card-modal">
+      <div class="modal-header">
+        <h3>✏️ Edit Flashcard</h3>
+        <button class="close-btn" id="close-edit-card">✕</button>
+      </div>
+      
+      <div class="add-card-form">
+        <div class="form-group">
+          <label for="edit-word">${getLanguageName(settings.targetLanguage)} Word:</label>
+          <input type="text" id="edit-word" value="${card.word}" autofocus />
+        </div>
+        
+        <div class="form-group">
+          <label for="edit-translation">${getLanguageName(settings.nativeLanguage)} Translations:</label>
+          <input type="text" id="edit-translation" value="${translationsText}" placeholder="Comma-separated: cold, flu, illness" />
+        </div>
+        
+        <div class="form-group">
+          <label for="edit-description">Description (optional):</label>
+          <textarea id="edit-description" rows="3">${card.description || ''}</textarea>
+        </div>
+        
+        <div class="form-actions">
+          <button class="action-btn" id="cancel-edit-card">Cancel</button>
+          <button class="primary-btn" id="save-edit-card">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  switchTab('vocabulary');
+  
+  // Event listeners
+  document.getElementById('close-edit-card')?.addEventListener('click', () => {
+    loadFlashcardList();
+  });
+  
+  document.getElementById('cancel-edit-card')?.addEventListener('click', () => {
+    loadFlashcardList();
+  });
+  
+  document.getElementById('save-edit-card')?.addEventListener('click', async () => {
+    await saveEditedCard(card.id);
+  });
+}
+
+// Save edited card
+async function saveEditedCard(cardId) {
+  const word = document.getElementById('edit-word')?.value.trim();
+  const translationInput = document.getElementById('edit-translation')?.value.trim();
+  const description = document.getElementById('edit-description')?.value.trim();
+  
+  if (!word || !translationInput) {
+    showNotification('Please fill in both word and translations', 'error');
+    return;
+  }
+  
+  // Parse comma-separated translations
+  const translations = translationInput
+    .split(',')
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
+  
+  if (translations.length === 0) {
+    showNotification('Please enter at least one translation', 'error');
+    return;
+  }
+  
+  try {
+    // Get existing card
+    const existingCard = await flashcardDB.getFlashcard(cardId);
+    
+    if (!existingCard) {
+      showNotification('Card not found', 'error');
+      return;
+    }
+    
+    // Update card with new values
+    const updatedCard = {
+      ...existingCard,
+      word: word,
+      translations: translations,
+      description: description
+    };
+    
+    await flashcardDB.addFlashcard(updatedCard); // addFlashcard updates if id exists
+    
+    // Reload flashcards
+    flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+    
+    showNotification('Flashcard updated!', 'success');
+    loadFlashcardList();
+    updateIndexedDBStatus();
+    // Stay in vocabulary tab - no need to switch
+  } catch (error) {
+    console.error('Error updating flashcard:', error);
+    showNotification('Error updating flashcard', 'error');
+  }
+}
+
 // Load and display flashcard list
 async function loadFlashcardList() {
   const vocabTab = document.getElementById('vocabulary-tab');
   if (!vocabTab) return;
   
+  // Fetch fresh flashcards from IndexedDB
   const flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
   
   vocabTab.innerHTML = `
@@ -689,6 +859,10 @@ async function loadFlashcardList() {
       <button class="action-btn" id="export-flashcards-btn">📥 Export</button>
       <button class="action-btn" id="import-flashcards-btn">📤 Import</button>
     </div>
+
+    <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
+      🎬 Extract Vocabulary from Video
+    </button>
     
     <div class="search-container">
       <input type="text" id="flashcard-search" placeholder="🔍 Search all words..." />
@@ -719,10 +893,6 @@ async function loadFlashcardList() {
         `).join('')
       }
     </div>
-    
-    <button class="action-btn" id="extract-vocab-btn" style="margin-top: 15px;">
-      🎬 Extract Vocabulary from Video
-    </button>
   `;
   
   // Re-attach event listeners
@@ -733,26 +903,62 @@ async function loadFlashcardList() {
   document.getElementById('flashcard-search')?.addEventListener('input', searchFlashcards);
   document.getElementById('extract-vocab-btn')?.addEventListener('click', extractAndShowVocabulary);
   
-  // Delete buttons
+  // Delete buttons - FIXED VERSION
   document.querySelectorAll('.delete-card-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      const id = parseInt(btn.dataset.id);
-      if (confirm('Delete this flashcard?')) {
-        await flashcardDB.deleteFlashcard(id);
-        flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
-        loadFlashcardList();
-        updateIndexedDBStatus();
+      e.stopPropagation();
+      const cardId = parseFloat(btn.dataset.id);
+      
+      // Get fresh flashcards
+      const allFlashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+      const card = allFlashcards.find(c => c.id === cardId);
+      
+      if (!card) {
+        console.error('Card not found:', cardId);
+        return;
       }
+      
+      showDeleteConfirmation(card);
     });
   });
   
-  // Edit buttons (you can implement this later)
+  // Edit buttons - FIXED VERSION
   document.querySelectorAll('.edit-card-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      showNotification('Edit feature coming soon!', 'info');
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const cardId = parseFloat(btn.dataset.id);
+      
+      // Get fresh flashcards
+      const allFlashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+      const card = allFlashcards.find(c => c.id === cardId);
+      
+      if (!card) {
+        console.error('Card not found:', cardId);
+        return;
+      }
+      
+      showEditCardModal(card);
     });
   });
 }
+  
+  // Edit buttons
+  document.querySelectorAll('.edit-card-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const cardId = parseFloat(btn.dataset.id);
+      
+      const allFlashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+      const card = allFlashcards.find(c => c.id === cardId);
+      
+      if (!card) {
+        console.error('Card not found:', cardId);
+        return;
+      }
+      
+      showEditCardModal(card);
+    });
+  });
 
 // Search flashcards
 function searchFlashcards(e) {
@@ -972,8 +1178,43 @@ async function extractVocabularyFromTranscript() {
   
   // Gemini (Chrome AI too unreliable for generating flashcards the user will learn from repeatedly)
   if (!settings.geminiApiKey) {
-    console.error('❌ No Gemini API key and Chrome AI unavailable');
-    showNotification('Please enable Chrome AI Writer or add Gemini API key', 'error');
+    console.error('❌ No Gemini API key configured');
+    
+    // Show helpful error in vocabulary tab
+    const vocabTab = document.getElementById('vocabulary-tab');
+    if (vocabTab) {
+      vocabTab.innerHTML = `
+        <div class="error-message" style="text-align: center; padding: 30px;">
+          <h3>🔑 Gemini API Key Required</h3>
+          <p style="margin: 20px 0;">Vocabulary extraction requires a free Gemini API key for accurate word lemmatization.</p>
+          
+          <div style="background: #f0f9ff; border: 2px solid #3b82f6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #1e40af;">✨ Get Your Free API Key:</h4>
+            <ol style="text-align: left; margin: 10px 0; padding-left: 20px;">
+              <li>Visit <a href="https://aistudio.google.com/apikey" target="_blank" style="color: #2563eb; text-decoration: underline;">Google AI Studio</a></li>
+              <li>Click "Create API Key"</li>
+              <li>Copy your key</li>
+              <li>Click the FluentAI extension icon</li>
+              <li>Paste key in Settings</li>
+            </ol>
+          </div>
+          
+          <a href="https://aistudio.google.com/apikey" target="_blank" class="primary-btn" style="display: inline-block; text-decoration: none; margin-top: 20px;">
+            🔑 Get Free API Key
+          </a>
+          
+          <button id="back-to-vocab" class="action-btn" style="margin-top: 10px;">
+            ← Back to Flashcards
+          </button>
+        </div>
+      `;
+      
+      switchTab('vocabulary');
+      
+      document.getElementById('back-to-vocab')?.addEventListener('click', () => {
+        loadFlashcardList();
+      });
+    }
     return [];
   }
   
@@ -3065,19 +3306,38 @@ function isAdPlaying() {
 }
 
 function updateAPIStatusDisplay() {
-  // Update Chrome AI status in Status tab
-  document.getElementById('translator-status').innerHTML = 
-    `🌐 Translator: <strong>${chromeAIAvailable.translator ? '✅ Ready' : '❌ Not available'}</strong>`;
-  document.getElementById('detector-status').innerHTML = 
-    `🔍 Language Detector: <strong>${chromeAIAvailable.languageDetector ? '✅ Ready' : '❌ Not available'}</strong>`;
-  document.getElementById('summarizer-status').innerHTML = 
-    `📝 Summarizer: <strong>${chromeAIAvailable.summarizer ? '✅ Ready' : '❌ Not available'}</strong>`;
-  document.getElementById('writer-status').innerHTML = 
-    `✍️ Writer: <strong>${chromeAIAvailable.writer ? '✅ Ready' : '❌ Not available'}</strong>`;
+  // Update Chrome AI status in Status tab (with null checks)
+  const translatorStatus = document.getElementById('translator-status');
+  const detectorStatus = document.getElementById('detector-status');
+  const summarizerStatus = document.getElementById('summarizer-status');
+  const writerStatus = document.getElementById('writer-status');
   
-  // Update Gemini status
-  document.getElementById('gemini-status').innerHTML = 
-    `🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong>`;
+  if (translatorStatus) {
+    translatorStatus.innerHTML = 
+      `🌐 Translator: <strong>${chromeAIAvailable.translator ? '✅ Ready' : '❌ Not available'}</strong>`;
+  }
+  
+  if (detectorStatus) {
+    detectorStatus.innerHTML = 
+      `🔍 Language Detector: <strong>${chromeAIAvailable.languageDetector ? '✅ Ready' : '❌ Not available'}</strong>`;
+  }
+  
+  if (summarizerStatus) {
+    summarizerStatus.innerHTML = 
+      `📝 Summarizer: <strong>${chromeAIAvailable.summarizer ? '✅ Ready' : '❌ Not available'}</strong>`;
+  }
+  
+  if (writerStatus) {
+    writerStatus.innerHTML = 
+      `✍️ Writer: <strong>${chromeAIAvailable.writer ? '✅ Ready' : '❌ Not available'}</strong>`;
+  }
+  
+  // Update Gemini status (with null check)
+  const geminiStatus = document.getElementById('gemini-status');
+  if (geminiStatus) {
+    geminiStatus.innerHTML = 
+      `🔑 API Key: <strong>${settings.geminiApiKey ? '✅ Set' : '❌ Not set'}</strong>`;
+  }
 }
 
 // Show vocabulary selection UI
@@ -3197,15 +3457,19 @@ async function showVocabularySelector(validatedWords) {
     
     showNotification(`Added ${selectedWords.length} words to flashcards!`, 'success');
     
-    vocabTab.innerHTML = `
-      <div class="success-message">
-        <h3>✅ Success!</h3>
-        <p>${selectedWords.length} words added to your flashcards</p>
-        <button id="extract-more-vocab" class="primary-btn">Extract More Words</button>
-      </div>
-    `;
+    flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+    await updateIndexedDBStatus();
+    loadFlashcardList();
+
+    // vocabTab.innerHTML = `
+    //   <div class="success-message">
+    //     <h3>✅ Success!</h3>
+    //     <p>${selectedWords.length} words added to your flashcards</p>
+    //     <button id="extract-more-vocab" class="primary-btn">Extract More Words</button>
+    //   </div>
+    // `;
     
-    document.getElementById('extract-more-vocab')?.addEventListener('click', extractAndShowVocabulary);
+    // document.getElementById('extract-more-vocab')?.addEventListener('click', extractAndShowVocabulary);
     
     updateIndexedDBStatus();
   });
@@ -3214,7 +3478,6 @@ async function showVocabularySelector(validatedWords) {
 }
 
 // Main function to extract and show vocabulary
-// Main function: Extract and show vocabulary with new system
 async function extractAndShowVocabulary() {
   if (!transcriptSegments || transcriptSegments.length === 0) {
     showNotification('Please load subtitles first', 'error');
@@ -3227,7 +3490,6 @@ async function extractAndShowVocabulary() {
   if (!overlay || !document.getElementById('vocabulary-tab')) {
     console.log('⚠️ Overlay not ready, creating it...');
     createOverlay();
-    // Wait a bit for DOM to update
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   
@@ -3251,7 +3513,16 @@ async function extractAndShowVocabulary() {
   const vocabulary = await extractVocabularyFromTranscript();
   console.log(`📊 Received ${vocabulary?.length || 0} words from extraction`);
   
+  // (it shows the helpful Gemini API key message if no key is configured)
   if (!vocabulary || vocabulary.length === 0) {
+    // Check if extractVocabularyFromTranscript already set up an error message
+    if (!settings.geminiApiKey) {
+      // The function already showed the API key message, so just return
+      console.log('⚠️ No Gemini API key - error message already shown');
+      return;
+    }
+    
+    // Otherwise show generic error (for other failure cases)
     vocabTab.innerHTML = `
       <div class="error-message">
         <h3>❌ No Vocabulary Found</h3>
