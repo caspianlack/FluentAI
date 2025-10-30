@@ -62,27 +62,31 @@ async function extractTranscriptFromDOM() {
       text = text.replace(/\s+/g, ' ').replace(/&nbsp;/g, ' ').trim();
       
       if (text && timeInSeconds !== null) {
-        let duration = 3; // Default duration
+        let endTime;
         
-        // Calculate actual duration based on next segment start time
+        // Calculate end time based on next segment's start time
         if (index < segments.length - 1) {
-          const nextTimestamp = segments[index + 1]?.querySelector('.segment-timestamp');
+          const nextTimestamp = segments[index + 1].querySelector('.segment-timestamp');
           if (nextTimestamp) {
             const nextTime = parseTimestamp(nextTimestamp.textContent.trim());
             if (nextTime !== null) {
-              duration = Math.max(2, nextTime - timeInSeconds); // Ensure minimum 2 seconds
+              endTime = nextTime;
             }
           }
-        } else {
-          // Last segment - estimate duration based on text length
-          duration = Math.max(3, Math.min(8, text.length / 10)); // 3-8 seconds based on text length
+        }
+        
+        // If we couldn't get the next segment's time, estimate based on text length
+        if (!endTime) {
+          const words = text.split(' ').length;
+          // Estimate ~0.5 seconds per word for comfortable speaking pace
+          endTime = timeInSeconds + Math.max(2, words * 0.5);
         }
         
         transcript.push({
           text: text,
           start: timeInSeconds,
-          duration: duration,
-          end: timeInSeconds + duration
+          end: endTime,
+          duration: endTime - timeInSeconds
         });
       }
     } catch (error) {
@@ -865,7 +869,7 @@ async function loadFlashcardList() {
     </button>
     
     <div class="search-container">
-      <input type="text" id="flashcard-search" placeholder="🔍 Search all words..." />
+      <input type="text" id="flashcard-search" placeholder="Search existing words..." />
     </div>
     
     <div class="flashcard-list" id="flashcard-list">
@@ -1787,6 +1791,11 @@ async function createFlashcardsFromVocab() {
 async function startQuiz() {
   quizMode = true;
   const quizOverlay = document.getElementById('quiz-overlay');
+  if (!quizOverlay) {
+    console.error('Quiz overlay not found');
+    return;
+  }
+  
   quizOverlay.style.display = 'flex';
   
   // Pause video
@@ -1795,7 +1804,6 @@ async function startQuiz() {
   
   await generateQuiz();
 }
-
 async function generateQuiz() {
   const quizContent = document.getElementById('quiz-content');
   
@@ -2220,12 +2228,16 @@ function showQuizResults() {
   
   html += `
       </div>
-      <button class="quiz-action-btn" onclick="startQuiz()">Try Another Quiz</button>
-      <button class="quiz-action-btn secondary" onclick="closeQuiz()">Close</button>
+      <button class="quiz-action-btn" id="try-another-quiz-btn">Try Another Quiz</button>
+      <button class="quiz-action-btn secondary" id="close-quiz-btn-results">Close</button>
     </div>
   `;
   
   quizContent.innerHTML = html;
+  
+  // Add event listeners (not onclick)
+  document.getElementById('try-another-quiz-btn')?.addEventListener('click', startQuiz);
+  document.getElementById('close-quiz-btn-results')?.addEventListener('click', closeQuiz);
   
   // Update stats
   updateQuizStats(currentQuiz.score, currentQuiz.questions.length);
@@ -2233,7 +2245,10 @@ function showQuizResults() {
 
 // Close quiz
 function closeQuiz() {
-  document.getElementById('quiz-overlay').style.display = 'none';
+  const quizOverlay = document.getElementById('quiz-overlay');
+  if (quizOverlay) {
+    quizOverlay.style.display = 'none';
+  }
   quizMode = false;
 }
 
@@ -2381,7 +2396,7 @@ function parseWriterResponse(response) {
   return generateFallbackQuiz();
 }
 
-// **FIXED: Issue #1 - Observe subtitles with configurable delay AFTER segment ends**
+// Observe subtitles and auto-pause
 function observeSubtitles() {
   const video = document.querySelector('video');
   if (!video) {
@@ -2398,49 +2413,53 @@ function observeSubtitles() {
 
   // Monitor video playback
   videoTimeUpdateInterval = setInterval(() => {
-    if (!settings.autoTranslate || quizMode) {
+    if (!settings.autoTranslate || quizMode || video.paused) {
       return;
     }
 
     if (isAdPlaying()) {
-      handleNewSubtitle('Ad is playing', 'easter egg');
+      return; // Skip processing during ads
     }
-
-    else {
 
     const currentTime = video.currentTime;
 
-    // Find segment that just ended (with configurable delay)
-    const justEndedSegment = transcriptSegments.find(segment => {
-      const segmentEndWithDelay = segment.end + settings.pauseDelay;
-      const isAtEnd = currentTime >= segmentEndWithDelay && currentTime <= segmentEndWithDelay + 0.5;
+    // Find segment that should trigger based on pause delay
+    const triggerSegment = transcriptSegments.find(segment => {
+      // Calculate the trigger time: segment end time + pause delay
+      const triggerTime = segment.end + settings.pauseDelay;
+      
+      // Check if we're at the trigger time (with a small buffer for timing precision)
+      const isAtTriggerTime = currentTime >= triggerTime && currentTime <= triggerTime + 0.2;
+      
+      // Check if this segment hasn't been processed yet
       const notProcessed = !segmentsProcessed.has(segment.start);
-      return isAtEnd && notProcessed;
+      
+      return isAtTriggerTime && notProcessed;
     });
 
-    // If we found a segment that just ended and video is playing, pause and show it
-    if (justEndedSegment && !video.paused && settings.autoTranslate) {
-      segmentsProcessed.add(justEndedSegment.start);
-      lastProcessedSegment = justEndedSegment;
+    // If we found a segment to trigger, pause and show it
+    if (triggerSegment) {
+      segmentsProcessed.add(triggerSegment.start);
+      lastProcessedSegment = triggerSegment;
       
-      console.log('FluentAI: Segment ended, pausing for translation:', justEndedSegment.text);
-      handleNewSubtitle(justEndedSegment.text, justEndedSegment);
+      console.log('FluentAI: Triggering segment at', currentTime.toFixed(1), 
+                  'for segment ending at', triggerSegment.end.toFixed(1),
+                  'with delay', settings.pauseDelay, 'seconds',
+                  'Text:', triggerSegment.text.substring(0, 30) + '...');
+      
+      // Pause video immediately
+      video.pause();
+      
+      handleNewSubtitle(triggerSegment.text, triggerSegment);
     }
 
-    // Also handle case where user seeks backwards - reset processed segments
+    // Handle case where user seeks backwards - reset processed segments
     if (lastProcessedSegment && currentTime < lastProcessedSegment.start) {
-      // User went backwards, clear processed segments from this point
+      console.log('FluentAI: User seeked backwards, resetting processed segments');
       segmentsProcessed.clear();
-      transcriptSegments.forEach(segment => {
-        if (segment.start >= currentTime) {
-          segmentsProcessed.delete(segment.start);
-        }
-      });
       lastProcessedSegment = null;
     }
-  }
-
-  }, 300); // Check more frequently for better timing
+  }, 100);
 }
 
 async function initializeTranscript() {
@@ -2801,7 +2820,7 @@ async function checkTranslation() {
         </div>`;
       }
 
-      if (validationResult.showGeminiOption && settings.geminiApiKey && !settings.useGeminiValidation) {
+      if (settings.geminiApiKey) {
         feedbackMessage += `
           <button id="verify-with-gemini" style="
             width: 100%;
