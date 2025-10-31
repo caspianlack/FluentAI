@@ -1348,9 +1348,9 @@ async function showVocabularySelectorSmart(wordPairs) {
         Translated with Chrome AI 🌐
       </p>
       
-      <div class="vocab-actions">
-        <button id="select-all-vocab" class="action-btn">Select All</button>
-        <button id="deselect-all-vocab" class="action-btn">Deselect All</button>
+      <div class="button-box">
+        <button id="select-all-vocab" class="btn-hotfix">Select All</button>
+        <button id="deselect-all-vocab" class="btn-hotfix">Deselect All</button>
         <button id="add-selected-vocab" class="primary-btn">Add Selected (0)</button>
       </div>
       
@@ -3431,11 +3431,12 @@ async function showVocabularySelector(validatedWords) {
       <h3>📚 Found ${validatedWords.length} New Words</h3>
       <p class="vocab-subtitle">Select words to add to your flashcards</p>
       
-      <div class="vocab-actions">
-        <button id="select-all-vocab" class="action-btn">Select All</button>
-        <button id="deselect-all-vocab" class="action-btn">Deselect All</button>
-        <button id="add-selected-vocab" class="primary-btn">Add Selected (0)</button>
+      <div class="button-box">
+        <button id="select-all-vocab" class="btn-vocab btn-select">Select All</button>
+        <button id="deselect-all-vocab" class="btn-vocab btn-deselect">Deselect All</button>
+        <button id="add-selected-vocab" class="btn-vocab btn-add">Add Selected (0)</button>
       </div>
+
       
       <div id="vocab-list" class="vocab-list"></div>
     </div>

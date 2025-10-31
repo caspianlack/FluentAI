@@ -336,6 +336,56 @@
   transition: all 0.2s;
 }
 
+/* HOTFIX */
+.btn-vocab {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: white;
+  border: 2px solid #e1e4e8;
+  color: #565656;
+}
+
+/* Shared hover animation */
+.btn-vocab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+/* Select All */
+.btn-select {
+  border-color: #667eea;
+}
+
+.btn-select:hover {
+  border-color: #667eea;
+}
+
+/* Deselect All */
+.btn-deselect {
+  border-color: #764ba2;
+}
+
+.btn-deselect:hover {
+  border-color: #764ba2;
+}
+
+/* Add Selected */
+.btn-add {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+}
+
+.btn-add:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+
 #fluentai-submit, .gemini-verify-btn, .cancel-btn {
   width: 70%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
