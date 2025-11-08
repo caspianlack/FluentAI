@@ -125,10 +125,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     detectLanguage(sender.tab.id, request.data).then(sendResponse);
     return true; // Indicates async response
   }
-  else if (request.action === 'summarize') {
-    summarizeText(sender.tab.id, request.data).then(sendResponse);
-    return true; // Indicates async response
-  }
   else if (request.action === 'generateContent') {
     generateContent(sender.tab.id, request.data).then(sendResponse);
     return true; // Indicates async response
@@ -145,12 +141,10 @@ async function checkChromeAIInTab(tabId) {
         return {
           translator: typeof self.translation !== 'undefined' && typeof self.translation.canTranslate === 'function',
           languageDetector: typeof self.translation !== 'undefined' && typeof self.translation.canDetect === 'function',
-          summarizer: typeof self.ai !== 'undefined' && typeof self.ai.summarizer !== 'undefined',
           writer: typeof self.ai !== 'undefined' && typeof self.ai.writer !== 'undefined',
           // New Chrome 138+ API names
           translatorNew: typeof self.Translator !== 'undefined',
           languageDetectorNew: typeof self.LanguageDetector !== 'undefined',
-          summarizerNew: typeof self.Summarizer !== 'undefined',
           writerNew: typeof self.Writer !== 'undefined'
         };
       }
@@ -259,58 +253,6 @@ async function detectLanguage(tabId, data) {
     return result.result;
   } catch (error) {
     console.error('Language detection error:', error);
-    return { success: false, error: error.message };
-  }
-}
-
-// Summarize text by injecting code into the page
-async function summarizeText(tabId, data) {
-  const { text, type = 'key-points', length = 'short' } = data;
-  
-  try {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      world: 'MAIN',
-      args: [text, type, length],
-      func: async (textToSummarize, summaryType, summaryLength) => {
-        try {
-          // Check for new Chrome 138+ API
-          if (typeof self.Summarizer !== 'undefined') {
-            const canSummarize = await self.Summarizer.canSummarize();
-            
-            if (canSummarize === 'readily' || canSummarize === 'after-download') {
-              const summarizer = await self.Summarizer.create({
-                type: summaryType,
-                length: summaryLength
-              });
-              const summary = await summarizer.summarize(textToSummarize);
-              return { success: true, summary, api: 'Summarizer' };
-            }
-          }
-          
-          // Fallback to older API if available
-          if (typeof self.ai !== 'undefined' && typeof self.ai.summarizer !== 'undefined') {
-            const session = await self.ai.summarizer.create({
-              type: summaryType,
-              length: summaryLength
-            });
-            const summary = await session.summarize(textToSummarize);
-            return { success: true, summary, api: 'ai.summarizer' };
-          }
-          
-          return { 
-            success: false, 
-            error: 'Chrome Summarizer API not available' 
-          };
-        } catch (error) {
-          return { success: false, error: error.message };
-        }
-      }
-    });
-    
-    return result.result;
-  } catch (error) {
-    console.error('Summarization error:', error);
     return { success: false, error: error.message };
   }
 }

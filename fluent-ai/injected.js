@@ -8,8 +8,6 @@
     translatorNew: typeof self.translation?.createTranslator === 'function',
     languageDetector: typeof self.LanguageDetector === 'function',
     languageDetectorNew: typeof self.translation?.createDetector === 'function',
-    summarizer: typeof self.Summarizer === 'function',
-    summarizerNew: typeof self.ai?.summarizer === 'object',
     writer: typeof self.Writer === 'function',
     writerNew: typeof self.ai?.writer === 'object'
   };
@@ -17,7 +15,6 @@
   // Store API instances
   let translatorInstance = null;
   let detectorInstance = null;
-  let summarizerInstance = null;
   let writerInstance = null;
   
   // Listen for messages from content script
@@ -109,29 +106,6 @@
             result = { success: true, results };
           } else {
             result = { success: false, error: 'Language detector not available' };
-          }
-          break;
-          
-        case 'summarize':
-          if (!summarizerInstance) {
-            if (apis.summarizerNew) {
-              summarizerInstance = await self.ai.summarizer.create({
-                type: data.type || 'key-points',
-                length: data.length || 'short'
-              });
-            } else if (apis.summarizer) {
-              summarizerInstance = await self.Summarizer.create({
-                type: data.type || 'key-points',
-                length: data.length || 'short'
-              });
-            }
-          }
-          
-          if (summarizerInstance) {
-            const summary = await summarizerInstance.summarize(data.text);
-            result = { success: true, summary };
-          } else {
-            result = { success: false, error: 'Summarizer not available' };
           }
           break;
           

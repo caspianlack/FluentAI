@@ -2,7 +2,6 @@ let overlay = null;
 let isEnabled = true;
 let settings = {};
 let currentSubtitle = '';
-let vocabularySet = new Set();
 let chromeAIAvailable = {
   translator: false,
   languageDetector: false,
@@ -18,7 +17,6 @@ let pendingRequests = new Map();
 let requestIdCounter = 0;
 
 let transcriptSegments = [];
-let currentSegmentIndex = 0;
 let videoTimeUpdateInterval = null;
 
 // Track processed segments to avoid re-showing them
@@ -520,7 +518,7 @@ function setupEventListeners() {
   document.getElementById('speak-btn')?.addEventListener('click', () => speakSubtitle(currentSubtitle));
   
   // Vocabulary controls
-  document.getElementById('extract-vocab-btn')?.addEventListener('click', extractVocabulary);
+  document.getElementById('extract-vocab-btn')?.addEventListener('click', extractAndShowVocabulary);
   document.getElementById('create-flashcards-btn')?.addEventListener('click', createFlashcardsFromVocab);
   
   // Quiz controls
@@ -954,24 +952,6 @@ async function loadFlashcardList() {
     });
   });
 }
-  
-  // Edit buttons
-  document.querySelectorAll('.edit-card-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const cardId = parseFloat(btn.dataset.id);
-      
-      const allFlashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
-      const card = allFlashcards.find(c => c.id === cardId);
-      
-      if (!card) {
-        console.error('Card not found:', cardId);
-        return;
-      }
-      
-      showEditCardModal(card);
-    });
-  });
 
 // Search flashcards
 function searchFlashcards(e) {
@@ -1712,53 +1692,6 @@ async function generateDescriptionsForWords(wordPairs) {
   
   console.log(`Generated ${successCount}/${wordPairs.length} descriptions successfully`);
   return results;
-}
-
-// Extract vocabulary function
-async function extractVocabulary() {
-  await extractAndShowVocabulary();
-}
-
-// Create flashcards from vocabulary set (legacy function)
-async function createFlashcardsFromVocab() {
-  let addedCount = 0;
-  
-  for (const word of vocabularySet) {
-    if (!flashcards.some(fc => fc.word === word)) {
-      let translation = word;
-      
-      if (chromeAIAvailable.translator) {
-        try {
-          translation = await translateText(word);
-        } catch (error) {
-          console.error('Translation error:', error);
-        }
-      }
-      
-      try {
-        await flashcardDB.addFlashcard({
-          word: word,
-          translation: translation,
-          context: '',
-          language: settings.targetLanguage
-        });
-        addedCount++;
-      } catch (error) {
-        console.error('Error adding flashcard:', error);
-      }
-    }
-  }
-  
-  // Reload flashcards from IndexedDB
-  flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
-  showNotification(`Added ${addedCount} new flashcards!`, 'success');
-  updateIndexedDBStatus();
-}
-
-// Update vocabulary display
-function updateVocabularyDisplay() {
-  document.getElementById('vocab-count').textContent = vocabularySet.size;
-  document.getElementById('flashcard-count').textContent = flashcards.length;
 }
 
 // Add word to flashcards

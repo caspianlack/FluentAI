@@ -93,7 +93,6 @@ For the best experience with on-device AI:
 
 2. **Enable AI Flags** at `chrome://flags`
    - Search for "Translation API" → Enable
-   - Search for "Summarizer API" → Enable  
    - Search for "Writer API" → Enable
    - Search for "Language Detector" → Enable
 
@@ -164,7 +163,7 @@ For the best experience with on-device AI:
 
 ### Tech Stack
 - **Manifest V3** - Modern Chrome extension architecture
-- **Chrome inbuilt AI APIs** - On-device translation, summarization, language detection
+- **Chrome inbuilt AI APIs** - On-device translation, language detection
 - **Google Gemini API** - Advanced AI for content generation
 - **Chrome Storage API** - Synced settings and local flashcards
 - **Service Workers** - Background processing and alarms
@@ -206,7 +205,6 @@ Content Script → Background Script → Page Context → Chrome AI API
 |-----|---------|--------|
 | **Translator** | Translate text between 12+ languages | On-device, instant |
 | **Language Detector** | Detect language of text | On-device, instant |
-| **Summarizer** | Create summaries of content | On-device |
 | **Writer** | Generate language learning content | On-device |
 
 ### API Detection
