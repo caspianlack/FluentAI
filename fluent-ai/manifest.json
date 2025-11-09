@@ -41,7 +41,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["icons/*.png", "sounds/*.mp3", "injected.js"],
+      "resources": ["icons/*.png", "icons/*.svg", "injected.js"],
       "matches": ["https://www.youtube.com/*"]
     }
   ]

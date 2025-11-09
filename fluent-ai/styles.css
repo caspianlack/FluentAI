@@ -1580,3 +1580,99 @@
   text-align: center;
   font-weight: 500;
 }
+
+.modal-title {
+  font-size: 24px;
+}
+
+.fluentai-language-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+.fluentai-language-modal .modal-content {
+  background: white;
+  padding: 25px;
+  border-radius: 12px;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  margin: 20px;
+}
+
+.language-options {
+  margin: 20px 0;
+}
+
+.language-options .option {
+  margin: 15px 0;
+  padding: 15px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.language-options .option:hover {
+  border-color: #cbd5e0;
+  background: #f7fafc;
+}
+
+.language-options .option.selected {
+  border-color: #4299e1;
+  background: #ebf8ff;
+}
+
+.language-options input[type="radio"] {
+  margin-right: 10px;
+}
+
+.language-options label {
+  cursor: pointer;
+  display: block;
+}
+
+.option-title, .modal-content p {
+  color: #2d3748;
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.option-title {
+  font-weight: bold;
+}
+
+.option-description {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.modal-actions {
+  text-align: right;
+  margin-top: 20px;
+}
+
+.primary-btn {
+  background: #4299e1;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.primary-btn:hover {
+  background: #3182ce;
+}

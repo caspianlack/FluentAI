@@ -1,4 +1,4 @@
-# 🎓 FluentAI Pro - Advanced Language Learning Chrome Extension
+# 🎓 FluentAI - Advanced Language Learning Chrome Extension
 
 **Learn languages naturally while watching YouTube videos with AI-powered real-time translation, interactive exercises, and intelligent flashcards.**
 

@@ -18,7 +18,7 @@ let requestIdCounter = 0;
 
 let transcriptSegments = [];
 let videoTimeUpdateInterval = null;
-
+let isInitializingTranscript = false;
 // Track processed segments to avoid re-showing them
 let segmentsProcessed = new Set();
 let lastProcessedSegment = null;
@@ -315,7 +315,7 @@ async function loadSettings() {
   
   settings = {
     nativeLanguage: result.nativeLanguage || 'en',
-    targetLanguage: result.targetLanguage || 'es',
+    targetLanguage: result.targetLanguage || 'fr',
     autoTranslate: result.autoTranslate !== false,
     geminiApiKey: result.geminiApiKey || '',
     quizFrequency: result.quizFrequency || 5,
@@ -345,10 +345,10 @@ function createOverlay() {
   overlay = document.createElement('div');
   overlay.id = 'fluentai-overlay';
   overlay.innerHTML = `
-    <!-- Side Panel (collapsible) -->
+    <!-- Side Panel (collapsible) --> 
     <div class="fluentai-panel" id="side-panel">
       <div class="fluentai-header">
-        <span class="fluentai-logo">🎓 FluentAI</span>
+        <span class="fluentai-logo">FluentAI</span>
         <div class="fluentai-controls">
           <button class="fluentai-collapse-btn" id="collapse-btn">◀</button>
           <button class="fluentai-toggle-btn" id="toggle-btn">Pause</button>
@@ -2330,6 +2330,10 @@ function showNotification(message, type = 'info') {
 
 // Get language name
 function getLanguageName(code) {
+  if (!code) {
+    return 'Unknown';
+  }
+
   const languages = {
     'en': 'English',
     'es': 'Spanish',
@@ -2420,7 +2424,6 @@ function observeSubtitles() {
 
     // Handle case where user seeks backwards - reset processed segments
     if (lastProcessedSegment && currentTime < lastProcessedSegment.start) {
-      console.log('FluentAI: User seeked backwards, resetting processed segments');
       segmentsProcessed.clear();
       lastProcessedSegment = null;
     }
@@ -2431,29 +2434,225 @@ async function initializeTranscript() {
   try {
     showNotification('Opening transcript panel...', 'info');
     
+    if (isInitializingTranscript) {
+      return false;
+    }
+
+    isInitializingTranscript = true;
+
     // Open transcript panel
     await openTranscriptPanel();
     
     // Extract segments
     transcriptSegments = await extractTranscriptFromDOM();
     
+    // Detect language from transcript content
+    const detectedLanguage = await detectTranscriptLanguage();
+    
+    // Compare detected language with target language
+    if (detectedLanguage && detectedLanguage !== settings.targetLanguage) {
+      const shouldContinue = await handleLanguageMismatch(detectedLanguage);
+      if (!shouldContinue) {
+        return false;
+      }
+    }
+    
     showNotification(`Loaded ${transcriptSegments.length} subtitle segments! Auto-pause is ${settings.autoTranslate ? 'ON' : 'OFF'}`, 'success');
     
     // Start observing video time
     observeSubtitles();
     
-    // Update UI status
-    // const statusElement = document.querySelector('.fluentai-status');
-    // if (statusElement) {
-    //   statusElement.innerHTML += `<p>📝 Loaded: <strong>${transcriptSegments.length} segments</strong></p>`;
-    // }
-    
     return true;
   } catch (error) {
-    console.error('FluentAI: Error initializing transcript:', error);
     showNotification(`Error: ${error.message}`, 'error');
     return false;
   }
+}
+
+async function detectTranscriptLanguage() { 
+  if (!chromeAIAvailable.languageDetector) {
+    return null;
+  }
+  
+  try {
+    const sampleText = transcriptSegments
+      .slice(0, 5)
+      .map(segment => segment.text)
+      .join(' ')
+      .substring(0, 1000);
+    
+    if (!sampleText || sampleText.trim().length < 10) {
+      return null;
+    }
+    
+    const result = await chromeAIBridge('detectLanguage', {
+      text: sampleText
+    });
+    
+    
+    if (result.success && result.results && result.results.length > 0) {
+      // Log all results for debugging
+      result.results.forEach((res, index) => {
+      });
+      
+      const topResult = result.results[0];
+      const confidenceThreshold = 0.9; // 90% confidence
+      
+      if (topResult.confidence >= confidenceThreshold) {
+        const detectedLang = topResult.detectedLanguage;
+        return detectedLang;
+      } else {
+        return null;
+      }
+    }
+    
+    console.log('❌ No valid language detection results');
+    return null;
+  } catch (error) {
+    console.error('❌ Language detection error:', error);
+    return null;
+  }
+}
+
+async function handleLanguageMismatch(detectedLanguage) {
+  if (!detectedLanguage) {
+    console.log('No language detected, continuing with current settings');
+    return true;
+  }
+  
+  const detectedLangName = getLanguageName(detectedLanguage);
+  const targetLangName = getLanguageName(settings.targetLanguage);
+  
+  console.log(`🌐 Showing language modal: ${detectedLangName} vs ${targetLangName}`);
+  const video = document.querySelector('video');
+  video.pause();
+  return new Promise((resolve) => {
+    // Create a modal dialog for user choice
+    const modal = document.createElement('div');
+    modal.className = 'fluentai-language-modal';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <h3 class = "modal-title">🌐 Language Mismatch Detected</h3>
+        <br>
+        <p>We detected the transcript is in <strong>${detectedLangName}</strong>, 
+        but your learning language is set to <strong>${targetLangName}</strong>.</p>
+        
+        <p><em>It is recommended to fix transcript language by changing subtitle language to ${targetLangName}. The bottom left of the transcript panel sometimes also allows you to change the language.</em></p>
+        
+        <div class="language-options">
+          ${detectedLanguage !== settings.nativeLanguage ? `
+            <div class="option">
+              <input type="radio" id="use-detected" name="language-choice" value="detected" checked>
+              <label for="use-detected">
+                <div class="option-title">Switch to ${detectedLangName}</div>
+                <div class="option-description">Update your learning language to match the video</div>
+              </label>
+            </div>
+          ` : ''}
+          
+          <div class="option">
+            <input type="radio" id="keep-current" name="language-choice" value="current" ${detectedLanguage === settings.nativeLanguage ? 'checked' : ''}>
+            <label for="keep-current">
+              <div class="option-title">Keep learning ${targetLangName}</div>
+              <div class="option-description">Ignore and continue with current settings (may have incorrect translations)</div>
+            </label>
+          </div>
+          
+          <div class="option">
+            <input type="radio" id="cancel-load" name="language-choice" value="cancel">
+            <label for="cancel-load">
+              <div class="option-title">Cancel transcript loading</div>
+              <div class="option-description">Find a video in your target language</div>
+            </label>
+          </div>
+        </div>
+        
+        <div class="modal-actions">
+          <button id="confirm-language" class="primary-btn">Confirm Choice</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(modal);
+    console.log('✅ Modal added to DOM');
+
+    // Add click handlers to the entire option divs for better UX
+    const optionDivs = modal.querySelectorAll('.option');
+    optionDivs.forEach(optionDiv => {
+      optionDiv.addEventListener('click', (e) => {
+        const radio = optionDiv.querySelector('input[type="radio"]');
+        if (radio && e.target !== radio) {
+          radio.checked = true;
+          // Update visual selection
+          optionDivs.forEach(opt => opt.classList.remove('selected'));
+          optionDiv.classList.add('selected');
+        }
+      });
+    });
+
+    // Initialize selection state
+    optionDivs[0].classList.add('selected');
+
+    const confirmBtn = modal.querySelector('#confirm-language');
+    if (!confirmBtn) {
+      console.error('❌ Confirm button not found!');
+      modal.remove();
+      resolve(true); // Continue anyway
+      return;
+    }
+
+    confirmBtn.addEventListener('click', async () => {
+      
+      const selectedRadio = modal.querySelector('input[name="language-choice"]:checked');
+      if (!selectedRadio) {
+        return;
+      }
+      
+      const selectedOption = selectedRadio.value;
+      
+      // Disable button to prevent double-clicks
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Processing...';
+      
+      switch (selectedOption) {
+        case 'detected':
+          console.log('🔄 Switching to detected language:', detectedLanguage);
+          settings.targetLanguage = detectedLanguage;
+          await chrome.storage.sync.set({ targetLanguage: detectedLanguage });
+          showNotification(`Learning language updated to ${detectedLangName}`, 'success');
+          flashcards = await flashcardDB.getFlashcardsByLanguage(settings.targetLanguage);
+          video.play();
+          break;
+          
+        case 'current':
+          console.log('🔁 Keeping current language:', settings.targetLanguage);
+          showNotification(`Continuing with ${targetLangName} - translations may be inaccurate`, 'warning');
+          video.play();
+          break;
+          
+        case 'cancel':
+          console.log('❌ Cancelling transcript loading');
+          modal.remove();
+          resolve(false);
+          video.play();
+          return;
+      }
+
+      console.log('🗑️ Removing modal and resolving true');
+      modal.remove();
+      resolve(true);
+    }, { once: true });
+
+    // Also allow Enter key to confirm
+    modal.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        confirmBtn.click();
+      }
+    });
+
+    // Focus the confirm button for accessibility
+    confirmBtn.focus();
+  });
 }
 
 // Handle new subtitle
