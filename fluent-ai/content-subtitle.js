@@ -9,7 +9,7 @@ function injectPageScript() {
 
 async function extractTranscriptFromDOM() {
   console.log('FluentAI: Extracting transcript from DOM...');
-  const segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+  const segments = findTranscriptSegments();
 
   if (segments.length === 0) {
     throw new Error('No transcript segments found. Please enable captions.');
@@ -19,31 +19,27 @@ async function extractTranscriptFromDOM() {
 
   segments.forEach((segment, index) => {
     try {
-      const timestampElement = segment.querySelector('.segment-timestamp');
-      if (!timestampElement) return;
+      const timestampStr = getSegmentTimestamp(segment);
+      if (!timestampStr) return;
 
-      const timeInSeconds = parseTimestamp(timestampElement.textContent.trim());
+      const timeInSeconds = parseTimestamp(timestampStr);
+      if (timeInSeconds === null) return;
 
-      const textElement = segment.querySelector('.segment-text, yt-formatted-string.segment-text');
-      if (!textElement) return;
+      const text = getSegmentText(segment);
+      if (!text) return;
 
-      let text = (textElement.textContent || textElement.innerText || '')
-        .replace(/\s+/g, ' ').replace(/&nbsp;/g, ' ').trim();
-
-      if (text && timeInSeconds !== null) {
-        let endTime;
-        if (index < segments.length - 1) {
-          const nextTimestamp = segments[index + 1].querySelector('.segment-timestamp');
-          if (nextTimestamp) {
-            const nextTime = parseTimestamp(nextTimestamp.textContent.trim());
-            if (nextTime !== null) endTime = nextTime;
-          }
+      let endTime;
+      if (index < segments.length - 1) {
+        const nextTimestampStr = getSegmentTimestamp(segments[index + 1]);
+        if (nextTimestampStr) {
+          const nextTime = parseTimestamp(nextTimestampStr);
+          if (nextTime !== null) endTime = nextTime;
         }
-        if (!endTime) {
-          endTime = timeInSeconds + Math.max(2, text.split(' ').length * 0.5);
-        }
-        transcript.push({ text, start: timeInSeconds, end: endTime, duration: endTime - timeInSeconds });
       }
+      if (!endTime) {
+        endTime = timeInSeconds + Math.max(2, text.split(' ').length * 0.5);
+      }
+      transcript.push({ text, start: timeInSeconds, end: endTime, duration: endTime - timeInSeconds });
     } catch (error) {
       console.warn('FluentAI: Error processing segment:', error);
     }
@@ -55,16 +51,57 @@ async function extractTranscriptFromDOM() {
   return transcript;
 }
 
+// Ordered list of segment container selectors across YouTube layout versions.
+// New Polymer layout (2025+) uses transcript-segment-view-model.
+// Old layout used ytd-transcript-segment-renderer.
+const TRANSCRIPT_SEGMENT_SELECTORS = [
+  'transcript-segment-view-model',
+  'ytd-transcript-segment-renderer',
+];
+
+function findTranscriptSegments() {
+  for (const sel of TRANSCRIPT_SEGMENT_SELECTORS) {
+    const nodes = document.querySelectorAll(sel);
+    if (nodes.length > 0) return nodes;
+  }
+  return [];
+}
+
+// Extract timestamp text from a segment element, handling both layouts.
+function getSegmentTimestamp(segment) {
+  // New layout: .ytwTranscriptSegmentViewModelTimestamp
+  const newEl = segment.querySelector('.ytwTranscriptSegmentViewModelTimestamp');
+  if (newEl) return newEl.textContent.trim();
+  // Old layout: .segment-timestamp
+  const oldEl = segment.querySelector('.segment-timestamp');
+  if (oldEl) return oldEl.textContent.trim();
+  return null;
+}
+
+// Extract subtitle text from a segment element, handling both layouts.
+function getSegmentText(segment) {
+  // New layout: span[role="text"] (ytAttributedStringHost)
+  const newEl = segment.querySelector('span[role="text"]');
+  if (newEl) return (newEl.textContent || newEl.innerText || '').replace(/\s+/g, ' ').replace(/&nbsp;/g, ' ').trim();
+  // Old layout: .segment-text
+  const oldEl = segment.querySelector('.segment-text, yt-formatted-string.segment-text');
+  if (oldEl) return (oldEl.textContent || oldEl.innerText || '').replace(/\s+/g, ' ').replace(/&nbsp;/g, ' ').trim();
+  return null;
+}
+
 async function openTranscriptPanel() {
   console.log('FluentAI: Opening transcript panel...');
 
   return new Promise((resolve, reject) => {
+    // Strategy 1: description-area transcript section
     let transcriptButton = document.querySelector('ytd-video-description-transcript-section-renderer button');
 
+    // Strategy 2: aria-label
     if (!transcriptButton) {
       transcriptButton = document.querySelector('[aria-label="Show transcript"], [aria-label*="transcript" i]');
     }
 
+    // Strategy 3: text content scan
     if (!transcriptButton) {
       const buttons = document.querySelectorAll('button, [role="button"]');
       for (const button of buttons) {
@@ -76,27 +113,32 @@ async function openTranscriptPanel() {
       }
     }
 
-    if (transcriptButton) {
-      console.log('FluentAI: Found transcript button, clicking...');
-      transcriptButton.click();
-
-      let attempts = 0;
-      const maxAttempts = 20;
-      const checkInterval = setInterval(() => {
-        attempts++;
-        const segs = document.querySelectorAll('ytd-transcript-segment-renderer');
-        if (segs.length > 0) {
-          console.log('FluentAI: Transcript panel loaded with', segs.length, 'segments');
-          clearInterval(checkInterval);
-          resolve();
-        } else if (attempts >= maxAttempts) {
-          clearInterval(checkInterval);
-          reject(new Error('Transcript panel did not load within expected time'));
-        }
-      }, 500);
-    } else {
+    if (!transcriptButton) {
       reject(new Error('Could not find transcript button. Video may not have captions available.'));
+      return;
     }
+
+    console.log('FluentAI: Found transcript button, clicking...');
+    transcriptButton.click();
+
+    let attempts = 0;
+    const maxAttempts = 30; // 15 seconds
+    const checkInterval = setInterval(() => {
+      attempts++;
+      const segs = findTranscriptSegments();
+      if (segs.length > 0) {
+        console.log('FluentAI: Transcript panel loaded with', segs.length, 'segments');
+        clearInterval(checkInterval);
+        resolve();
+      } else if (attempts >= maxAttempts) {
+        clearInterval(checkInterval);
+        // Log what's in the DOM to help diagnose future selector changes
+        const transcriptArea = document.querySelector('ytd-transcript-renderer, [id*="transcript"], [class*="transcript"]');
+        console.warn('FluentAI: Transcript panel timeout. Transcript area found:', !!transcriptArea);
+        if (transcriptArea) console.warn('FluentAI: Transcript area children:', transcriptArea.children.length, transcriptArea.innerHTML.substring(0, 300));
+        reject(new Error('Transcript panel did not load within expected time'));
+      }
+    }, 500);
   });
 }
 
