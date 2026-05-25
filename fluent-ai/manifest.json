@@ -18,7 +18,18 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["flashcardDB.js", "content.js"],
+      "js": [
+        "flashcardDB.js",
+        "content-globals.js",
+        "content-utils.js",
+        "content-bridge.js",
+        "content-subtitle.js",
+        "content-flashcards.js",
+        "content-vocab.js",
+        "content-quiz.js",
+        "content-translation.js",
+        "content.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_end"
     }
