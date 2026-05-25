@@ -55,6 +55,12 @@ function switchTab(tabName) {
   }
 }
 
+function applyPopupTheme(name) {
+  document.body.className = document.body.className
+    .split(' ').filter(c => !c.startsWith('theme-')).join(' ');
+  document.body.classList.add(name || 'theme-ink');
+}
+
 // Load settings
 async function loadSettings() {
   const result = await chrome.storage.sync.get([
@@ -67,7 +73,8 @@ async function loadSettings() {
     'difficulty',
     'pauseDelay',
     'useGeminiValidation',
-    'autoPlayAfterCorrect'
+    'autoPlayAfterCorrect',
+    'theme'
   ]);
   
   // Apply settings to UI
@@ -100,6 +107,8 @@ async function loadSettings() {
 
   document.getElementById('useGeminiValidation').checked = result.useGeminiValidation !== false;
   document.getElementById('autoPlayAfterCorrect').checked = result.autoPlayAfterCorrect !== false;
+
+  applyPopupTheme(result.theme || 'theme-ink');
 }
 
 // Save settings
@@ -210,43 +219,38 @@ function updateStatsDisplay() {
 function drawProgressChart() {
   const canvas = document.getElementById('progressChart');
   if (!canvas) return;
-  
+
   const ctx = canvas.getContext('2d');
   const width = canvas.width = canvas.offsetWidth;
   const height = canvas.height = 150;
-  
-  // Sample data for weekly progress
+
+  const style = getComputedStyle(document.body);
+  const accentColor = style.getPropertyValue('--accent').trim() || '#D94F3D';
+  const mutedColor = style.getPropertyValue('--text-muted').trim() || '#AEAEB2';
+
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const values = [12, 19, 15, 25, 22, 30, 28];
-  
-  // Clear canvas
+
   ctx.clearRect(0, 0, width, height);
-  
-  // Draw bars
+
   const barWidth = width / days.length * 0.6;
   const spacing = width / days.length;
   const maxValue = Math.max(...values);
-  
+
   values.forEach((value, index) => {
     const barHeight = (value / maxValue) * (height - 40);
     const x = index * spacing + (spacing - barWidth) / 2;
     const y = height - barHeight - 20;
-    
-    // Draw bar
-    const gradient = ctx.createLinearGradient(0, y, 0, height - 20);
-    gradient.addColorStop(0, '#667eea');
-    gradient.addColorStop(1, '#764ba2');
-    ctx.fillStyle = gradient;
+
+    ctx.fillStyle = accentColor;
     ctx.fillRect(x, y, barWidth, barHeight);
-    
-    // Draw label
-    ctx.fillStyle = '#666';
+
+    ctx.fillStyle = mutedColor;
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(days[index], x + barWidth / 2, height - 5);
-    
-    // Draw value
-    ctx.fillStyle = '#667eea';
+
+    ctx.fillStyle = accentColor;
     ctx.font = 'bold 11px sans-serif';
     ctx.fillText(value, x + barWidth / 2, y - 5);
   });
