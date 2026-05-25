@@ -24,28 +24,53 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 });
 
+// Read a random flashcard directly from IndexedDB (flashcards are not in chrome.storage.sync)
+async function getRandomFlashcardFromDB(targetLanguage) {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('FluentAIFlashcards', 6);
+    request.onerror = () => resolve(null);
+    request.onsuccess = (event) => {
+      const db = event.target.result;
+      const transaction = db.transaction(['flashcards'], 'readonly');
+      const store = transaction.objectStore('flashcards');
+      const index = store.index('language');
+      const getAllRequest = index.getAll(targetLanguage);
+      getAllRequest.onerror = () => resolve(null);
+      getAllRequest.onsuccess = () => {
+        const cards = getAllRequest.result;
+        if (!cards || cards.length === 0) {
+          resolve(null);
+        } else {
+          resolve(cards[Math.floor(Math.random() * cards.length)]);
+        }
+      };
+    };
+  });
+}
+
 // Send practice notification
 async function sendPracticeNotification() {
   const settings = await chrome.storage.sync.get([
     'notificationEnabled',
-    'flashcards',
     'targetLanguage',
     'nativeLanguage'
   ]);
-  
-  if (!settings.notificationEnabled || !settings.flashcards || settings.flashcards.length === 0) {
+
+  if (!settings.notificationEnabled) {
     return;
   }
-  
-  // Select a random flashcard
-  const flashcard = settings.flashcards[Math.floor(Math.random() * settings.flashcards.length)];
+
+  const flashcard = await getRandomFlashcardFromDB(settings.targetLanguage || 'es');
+  if (!flashcard) {
+    return;
+  }
   
   // Create notification
   chrome.notifications.create({
     type: 'basic',
     iconUrl: 'icons/icon128.png',
     title: '🎓 FluentAI Practice Time!',
-    message: `How do you say "${flashcard.translation}" in ${getLanguageName(settings.targetLanguage)}?`,
+    message: `How do you say "${flashcard.translations?.[0] ?? flashcard.word}" in ${getLanguageName(settings.targetLanguage)}?`,
     buttons: [
       { title: 'Show Answer' },
       { title: 'Open FluentAI' }

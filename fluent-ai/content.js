@@ -249,9 +249,9 @@ async function initializeChromeAI() {
         summarizer: checkResult.apis.summarizerNew || checkResult.apis.summarizer,
         writer: checkResult.apis.writerNew || checkResult.apis.writer
       };
-      
+
       console.log('Chrome AI APIs available:', chromeAIAvailable);
-      updateAPIStatus();
+      updateAPIStatusDisplay();
     }
   } catch (error) {
     console.error('Error checking Chrome AI APIs:', error);
@@ -1520,8 +1520,8 @@ async function showVocabularySelectorSmart(wordPairs) {
         </div>
       `;
       
-      document.getElementById('extract-more-vocab').addEventListener('click', extractAndShowVocabulary);
-      document.getElementById('start-practice-now').addEventListener('click', () => startPracticeFromOverlay());
+      document.getElementById('extract-more-vocab')?.addEventListener('click', extractAndShowVocabulary);
+      document.getElementById('start-practice-now')?.addEventListener('click', () => startPracticeFromOverlay());
       document.getElementById('add-new-card-btn')?.addEventListener('click', showAddCardModal);
       document.getElementById('practice-now-btn')?.addEventListener('click', startPracticeFromOverlay);
       document.getElementById('export-flashcards-btn')?.addEventListener('click', exportFlashcards);
@@ -1847,19 +1847,6 @@ function generateFallbackQuiz() {
         correct: missingWord
       });
     }
-  }
-  
-  // Vocabulary translation
-  if (vocabularySet.size > 0) {
-    const vocabArray = Array.from(vocabularySet);
-    const randomWord = vocabArray[Math.floor(Math.random() * vocabArray.length)];
-    
-    questions.push({
-      type: 'translation',
-      question: `Translate this word to ${getLanguageName(settings.nativeLanguage)}:`,
-      word: randomWord,
-      correct: null // Will be checked with translation API
-    });
   }
   
   return questions;
