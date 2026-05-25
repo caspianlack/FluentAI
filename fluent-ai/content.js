@@ -5,7 +5,7 @@ async function loadSettings() {
   const result = await chrome.storage.sync.get([
     'nativeLanguage', 'targetLanguage', 'autoTranslate', 'geminiApiKey',
     'quizFrequency', 'notificationEnabled', 'pauseDelay',
-    'useGeminiValidation', 'autoPlayAfterCorrect'
+    'useGeminiValidation', 'autoPlayAfterCorrect', 'theme'
   ]);
 
   settings = {
@@ -17,7 +17,8 @@ async function loadSettings() {
     notificationEnabled: result.notificationEnabled !== false,
     pauseDelay: result.pauseDelay !== undefined ? result.pauseDelay : 0.0,
     useGeminiValidation: result.useGeminiValidation !== false,
-    autoPlayAfterCorrect: result.autoPlayAfterCorrect !== false
+    autoPlayAfterCorrect: result.autoPlayAfterCorrect !== false,
+    theme: result.theme || 'theme-ink'
   };
 
   try {
@@ -121,8 +122,31 @@ function createOverlay() {
 
         <!-- Status Tab -->
         <div class="tab-content" id="status-tab" style="display: none;">
+
           <div class="fluentai-status">
-            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Learning Settings</h3>
+            <h3>🎨 Theme</h3>
+            <div class="theme-swatches">
+              <button class="theme-swatch" data-theme="theme-ink">
+                <div class="swatch-preview swatch-ink"></div>
+                <span>Ink</span>
+              </button>
+              <button class="theme-swatch" data-theme="theme-midnight">
+                <div class="swatch-preview swatch-midnight"></div>
+                <span>Midnight</span>
+              </button>
+              <button class="theme-swatch" data-theme="theme-warm">
+                <div class="swatch-preview swatch-warm"></div>
+                <span>Warm</span>
+              </button>
+              <button class="theme-swatch" data-theme="theme-forest">
+                <div class="swatch-preview swatch-forest"></div>
+                <span>Forest</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="fluentai-status">
+            <h3>Learning Settings</h3>
             <p>🎯 Learning: <strong>${getLanguageName(settings.targetLanguage)}</strong></p>
             <p>🗣️ Native: <strong>${getLanguageName(settings.nativeLanguage)}</strong></p>
             <p>📺 Auto-pause: <strong>${settings.autoTranslate ? 'ON' : 'OFF'}</strong></p>
@@ -131,16 +155,16 @@ function createOverlay() {
             <p>▶️ Auto-play after correct: <strong>${settings.autoPlayAfterCorrect !== false ? 'ON' : 'OFF'}</strong></p>
           </div>
 
-          <div class="fluentai-status" style="margin-top: 15px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Chrome AI Status</h3>
+          <div class="fluentai-status" style="margin-top: 10px;">
+            <h3>Chrome AI Status</h3>
             <p id="translator-status">🌐 Translator: <strong>⏳ Checking...</strong></p>
             <p id="detector-status">🔍 Language Detector: <strong>⏳ Checking...</strong></p>
             <p id="summarizer-status">📝 Summarizer: <strong>⏳ Checking...</strong></p>
             <p id="writer-status">✍️ Writer: <strong>⏳ Checking...</strong></p>
           </div>
 
-          <div class="fluentai-status" style="margin-top: 15px;">
-            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: #2d3748;">Storage Status</h3>
+          <div class="fluentai-status" style="margin-top: 10px;">
+            <h3>Storage Status</h3>
             <p id="indexeddb-status">💾 IndexedDB: <strong>⏳ Checking...</strong></p>
           </div>
 
@@ -177,9 +201,24 @@ function createOverlay() {
   updateIndexedDBStatus();
 }
 
+function applyTheme(themeName) {
+  if (!overlay) return;
+  overlay.className = overlay.className.split(' ').filter(c => !c.startsWith('theme-')).join(' ');
+  overlay.classList.add(themeName);
+  settings.theme = themeName;
+  document.querySelectorAll('.theme-swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.theme === themeName);
+  });
+  chrome.storage.sync.set({ theme: themeName });
+}
+
 function setupEventListeners() {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', (e) => switchTab(e.target.dataset.tab));
+  });
+
+  document.querySelectorAll('.theme-swatch').forEach(btn => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
   });
 
   document.getElementById('collapse-btn')?.addEventListener('click', collapsePanel);
@@ -328,6 +367,7 @@ async function init() {
   await flashcardDB.waitForReady();
   await loadSettings();
   createOverlay();
+  applyTheme(settings.theme || 'theme-ink');
   addTranscriptButton();
   updateAPIStatusDisplay();
 
