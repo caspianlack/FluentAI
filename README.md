@@ -171,16 +171,35 @@ For the best experience with on-device AI:
 ### File Structure
 ```
 fluent-ai/
-├── manifest.json           # Extension configuration
-├── background.js           # Service worker (AI bridge, notifications)
-├── content.js              # YouTube page integration
-├── injected.js             # Page context for Chrome AI access
-├── popup.html              # Extension popup interface
-├── popup.js                # Popup functionality
-├── popup.css               # Popup styling
-├── styles.css              # Content script styling
-├── icons/                  # Extension icons
-└── README.md               # You are here!
+├── manifest.json              # Extension configuration
+├── background.js              # Service worker (notifications, IndexedDB access)
+├── injected.js                # Runs in page main world — Chrome AI API access
+├── flashcardDB.js             # IndexedDB wrapper (FlashcardDB class)
+│
+├── content-globals.js         # Shared var state across all content scripts
+├── content-utils.js           # Pure utilities (similarity, timestamps, language names)
+├── content-bridge.js          # postMessage bridge to injected.js + Chrome AI helpers
+├── content-subtitle.js        # Transcript loading, subtitle observation, language detection
+├── content-flashcards.js      # Flashcard CRUD UI (add/edit/delete/import/export)
+├── content-vocab.js           # Vocabulary extraction from transcript via Gemini
+├── content-quiz.js            # Quiz logic, SM-2 spaced repetition algorithm
+├── content-translation.js     # Translation checking, Gemini validation, TTS
+├── content.js                 # Overlay HTML, event wiring, init()
+│
+├── popup.html / popup.js      # Extension popup interface
+├── popup.css / styles.css     # Styling
+├── icons/                     # Extension icons
+└── docs/                      # Per-module architecture documentation
+    ├── README.md              # Module index + scoping rules
+    ├── content-globals.md
+    ├── content-utils.md
+    ├── content-bridge.md
+    ├── content-subtitle.md
+    ├── content-flashcards.md
+    ├── content-vocab.md
+    ├── content-quiz.md
+    ├── content-translation.md
+    └── content.md
 ```
 
 ### Chrome AI Bridge Implementation
@@ -188,12 +207,13 @@ fluent-ai/
 The extension uses a **bridge architecture** to access Chrome's built-in AI APIs:
 
 ```
-Content Script → Background Script → Page Context → Chrome AI API
-                        ↓                               ↓
-                   Response ← Message Chain ← Result
+Content Script (isolated world)
+  └── content-bridge.js  ──postMessage──►  injected.js (page main world)
+                                                └── Chrome AI APIs
+                         ◄──postMessage──
 ```
 
-**Why?** Chrome AI APIs are only available in the page's main world context, not in isolated content scripts. The bridge safely injects code into the page to access these APIs.
+**Why?** Chrome AI APIs are only available in the page's main world context, not in isolated content scripts. `injected.js` is injected as a `<script>` tag into the page and proxies calls back over `window.postMessage`.
 
 ---
 
